@@ -352,6 +352,8 @@ helm lint ./helm
 
 #### 1. Build Container Image (OpenShift 4.18+ Optimized)
 
+**Important Note**: This project uses `Containerfile` instead of `Dockerfile` for container builds.
+
 ```bash
 # Build the container image with OpenShift 4.18+ optimizations
 podman build --platform linux/amd64 -t rag-api:latest .
@@ -363,7 +365,8 @@ podman tag rag-api:latest your-registry.com/rag-api:latest
 podman push your-registry.com/rag-api:latest
 
 # Alternative: Build directly in OpenShift
-oc new-build --strategy=docker --binary --name=rag-api
+# Note: This project uses Containerfile instead of Dockerfile
+oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
 oc start-build rag-api --from-dir=. --follow
 ```
 
@@ -682,7 +685,21 @@ oc describe pod <pod-name>
 oc logs <pod-name>
 ```
 
-#### 2. Service Unavailable
+#### 2. Build Failures with OpenShift
+
+```bash
+# If you get "no such file or directory" error for Dockerfile:
+# This project uses Containerfile, not Dockerfile
+oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
+
+# Check build logs
+oc logs build/rag-api-1
+
+# Check build status
+oc get builds
+```
+
+#### 3. Service Unavailable
 
 ```bash
 # Check service endpoints
@@ -695,7 +712,7 @@ oc exec <pod-name> -- curl http://rag-api:8000/health
 oc get route rag-api -o yaml
 ```
 
-#### 3. High Resource Usage
+#### 4. High Resource Usage
 
 ```bash
 # Check resource usage
@@ -705,7 +722,7 @@ oc top pods -l app=rag-api
 oc describe pod <pod-name> | grep -A 10 "Limits:"
 ```
 
-#### 4. Connection Issues
+#### 5. Connection Issues
 
 ```bash
 # Test ElasticSearch connection
@@ -832,7 +849,8 @@ oc new-project rag-openshift-ai
 oc apply -f openshift/deployment.yaml
 
 # 3. Build and deploy using OpenShift build
-oc new-build --strategy=docker --binary --name=rag-api
+# Note: This project uses Containerfile instead of Dockerfile
+oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
 oc start-build rag-api --from-dir=. --follow
 oc rollout status deployment/rag-api
 ```
