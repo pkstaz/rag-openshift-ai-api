@@ -114,6 +114,24 @@ ENV_SECRET_KEY=your-secret-key-change-in-production
 
 ## 🚀 Deployment Options
 
+### Automated Deployment Scripts
+
+This project includes several automation scripts for easy deployment:
+
+```bash
+# OpenShift Build Script (handles command separation automatically)
+./scripts/openshift-build.sh -f Containerfile
+
+# Docker Build Script (supports multiple engines and platforms)
+./scripts/build-docker.sh --platform linux/amd64
+
+# Helm Installation Script (automated Helm deployment)
+./scripts/helm-install.sh --environment production
+
+# Quick Deploy Script (complete deployment pipeline)
+./scripts/quick-deploy.sh
+```
+
 ### Option 1: Helm Installation (Recommended)
 
 Helm provides the easiest and most flexible way to deploy the RAG API on OpenShift 4.18+.
@@ -372,13 +390,27 @@ podman push your-registry.com/rag-api:latest
 ```
 
 # Alternative: Build directly in OpenShift
+# Note: Execute these commands separately, not together
+
 # Option 1: Using Containerfile (recommended)
+# Step 1: Create build configuration
 oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
+
+# Step 2: Start the build
 oc start-build rag-api --from-dir=. --follow
 
 # Option 2: Using Dockerfile (for compatibility)
+# Step 1: Create build configuration
 oc new-build --strategy=docker --binary --name=rag-api
+
+# Step 2: Start the build
 oc start-build rag-api --from-dir=. --follow
+
+# Option 3: Using the automated script (recommended)
+./scripts/openshift-build.sh -f Containerfile
+
+# Step 3: Wait for deployment
+oc rollout status deployment/rag-api
 ```
 
 ### 2. Create OpenShift Project
@@ -708,6 +740,18 @@ oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfil
 # Option 2: Using Dockerfile (for compatibility)
 oc new-build --strategy=docker --binary --name=rag-api
 
+# If you get "unknown flag: --from-dir" error:
+# Make sure to execute commands separately, not together
+
+# Step 1: Create build configuration
+oc new-build --strategy=docker --binary --name=rag-api
+
+# Step 2: Start the build (separate command)
+oc start-build rag-api --from-dir=. --follow
+
+# Alternative: Use the automated script (recommended)
+./scripts/openshift-build.sh -f Containerfile
+
 # Check build logs
 oc logs build/rag-api-1
 
@@ -865,13 +909,23 @@ oc new-project rag-openshift-ai
 oc apply -f openshift/deployment.yaml
 
 # 3. Build and deploy using OpenShift build
+# Note: Execute these commands separately, not together
+
 # Option 1: Using Containerfile (recommended)
+# Step 1: Create build configuration
 oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
+
+# Step 2: Start the build
 oc start-build rag-api --from-dir=. --follow
 
 # Option 2: Using Dockerfile (for compatibility)
+# Step 1: Create build configuration
 oc new-build --strategy=docker --binary --name=rag-api
+
+# Step 2: Start the build
 oc start-build rag-api --from-dir=. --follow
+
+# Step 3: Wait for deployment
 oc rollout status deployment/rag-api
 ```
 
