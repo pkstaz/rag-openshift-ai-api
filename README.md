@@ -352,21 +352,32 @@ helm lint ./helm
 
 #### 1. Build Container Image (OpenShift 4.18+ Optimized)
 
-**Important Note**: This project uses `Containerfile` instead of `Dockerfile` for container builds.
+**Important Note**: This project provides both `Containerfile` and `Dockerfile` for maximum compatibility. The `Containerfile` is the primary build file, while `Dockerfile` is provided for tools that expect it.
 
 ```bash
-# Build the container image with OpenShift 4.18+ optimizations
+# Option 1: Using the build script (recommended)
+./scripts/build-docker.sh -f Containerfile -e podman
+
+# Option 2: Manual build with Podman
 podman build --platform linux/amd64 -t rag-api:latest .
+
+# Option 3: Manual build with Docker
+docker build --platform linux/amd64 -t rag-api:latest .
 
 # Tag for your registry (replace with your registry)
 podman tag rag-api:latest your-registry.com/rag-api:latest
 
 # Push to registry
 podman push your-registry.com/rag-api:latest
+```
 
 # Alternative: Build directly in OpenShift
-# Note: This project uses Containerfile instead of Dockerfile
+# Option 1: Using Containerfile (recommended)
 oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
+oc start-build rag-api --from-dir=. --follow
+
+# Option 2: Using Dockerfile (for compatibility)
+oc new-build --strategy=docker --binary --name=rag-api
 oc start-build rag-api --from-dir=. --follow
 ```
 
@@ -689,8 +700,13 @@ oc logs <pod-name>
 
 ```bash
 # If you get "no such file or directory" error for Dockerfile:
-# This project uses Containerfile, not Dockerfile
+# This project provides both Containerfile and Dockerfile for compatibility
+
+# Option 1: Using Containerfile (recommended)
 oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
+
+# Option 2: Using Dockerfile (for compatibility)
+oc new-build --strategy=docker --binary --name=rag-api
 
 # Check build logs
 oc logs build/rag-api-1
@@ -849,8 +865,12 @@ oc new-project rag-openshift-ai
 oc apply -f openshift/deployment.yaml
 
 # 3. Build and deploy using OpenShift build
-# Note: This project uses Containerfile instead of Dockerfile
+# Option 1: Using Containerfile (recommended)
 oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
+oc start-build rag-api --from-dir=. --follow
+
+# Option 2: Using Dockerfile (for compatibility)
+oc new-build --strategy=docker --binary --name=rag-api
 oc start-build rag-api --from-dir=. --follow
 oc rollout status deployment/rag-api
 ```
