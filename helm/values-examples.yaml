@@ -948,3 +948,458 @@ podTemplateLabels: {}
 # - docs/DEPLOYMENT.md
 # - helm/values.yaml (reference)
 # - API documentation at /docs when deployed 
+
+# =============================================================================
+# Example 1: Basic Development Deployment
+# =============================================================================
+development:
+  # Image Configuration
+  image:
+    repository: rag-openshift-ai-api
+    tag: "latest"
+    pullPolicy: "Always"
+
+  # Basic deployment
+  replicaCount: 1
+
+  # Minimal resources
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  # Basic configuration
+  config:
+    elasticsearch:
+      url: "https://elasticsearch:9200"
+      index: "rag-documents"
+      username: "elastic"
+      password: "changeme"
+    
+    vllm:
+      endpoint: "http://vllm-service:8000"
+      defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+    
+    api:
+      debug: true
+      logLevel: "DEBUG"
+
+  # Disable advanced features for development
+  monitoring:
+    serviceMonitor:
+      enabled: false
+    prometheusRule:
+      enabled: false
+
+  networkPolicy:
+    enabled: false
+
+  hpa:
+    enabled: false
+
+# =============================================================================
+# Example 2: Production Deployment
+# =============================================================================
+production:
+  # Image Configuration
+  image:
+    repository: your-registry.com/rag-api
+    tag: "v1.0.0"
+    pullPolicy: "Always"
+    pullSecrets:
+      - name: your-registry-secret
+
+  # Production scaling
+  replicaCount: 3
+
+  # Production resources
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+
+  # Production configuration
+  config:
+    elasticsearch:
+      url: "https://elasticsearch-prod:9200"
+      index: "rag-documents"
+      username: "elastic"
+      password: "secure-password"
+      sslVerify: true
+      timeout: 30
+      maxRetries: 3
+    
+    vllm:
+      endpoint: "http://vllm-prod:8000"
+      defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+      maxTokens: 2048
+      temperature: 0.7
+    
+    api:
+      debug: false
+      logLevel: "INFO"
+      corsOrigins: ["https://your-frontend.com"]
+      rateLimit:
+        enabled: true
+        requestsPerMinute: 60
+
+  # Production monitoring
+  monitoring:
+    serviceMonitor:
+      enabled: true
+      interval: "30s"
+    prometheusRule:
+      enabled: true
+      rules:
+        - alert: RAGAPIHighErrorRate
+          expr: rate(rag_api_errors_total[5m]) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High error rate in RAG API"
+
+  # Production security
+  security:
+    podSecurityStandards:
+      level: "restricted"
+
+  # Production scaling
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+  # Production networking
+  networkPolicy:
+    enabled: true
+    ingressRules:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                name: allowed-namespace
+        ports:
+          - protocol: TCP
+            port: 8000
+
+# =============================================================================
+# Example 3: High Availability Deployment
+# =============================================================================
+high-availability:
+  # Image Configuration
+  image:
+    repository: your-registry.com/rag-api
+    tag: "v1.0.0"
+    pullPolicy: "Always"
+
+  # HA scaling
+  replicaCount: 5
+
+  # HA resources
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+
+  # HA configuration
+  config:
+    elasticsearch:
+      url: "https://elasticsearch-ha:9200"
+      index: "rag-documents"
+      username: "elastic"
+      password: "secure-password"
+      sslVerify: true
+      timeout: 30
+      maxRetries: 5
+      maxConnections: 50
+    
+    vllm:
+      endpoint: "http://vllm-ha:8000"
+      defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+      maxTokens: 2048
+      temperature: 0.7
+      timeout: 120
+    
+    api:
+      debug: false
+      logLevel: "INFO"
+      requestTimeout: 300
+      rateLimit:
+        enabled: true
+        requestsPerMinute: 100
+        burstSize: 20
+
+  # HA monitoring
+  monitoring:
+    serviceMonitor:
+      enabled: true
+      interval: "15s"
+    prometheusRule:
+      enabled: true
+      rules:
+        - alert: RAGAPIHighErrorRate
+          expr: rate(rag_api_errors_total[5m]) > 0.05
+          for: 1m
+          labels:
+            severity: critical
+        - alert: RAGAPIHighLatency
+          expr: histogram_quantile(0.95, rate(rag_api_request_duration_seconds_bucket[5m])) > 5
+          for: 2m
+          labels:
+            severity: warning
+
+  # HA scaling
+  hpa:
+    enabled: true
+    minReplicas: 5
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 60
+    targetMemoryUtilizationPercentage: 70
+
+  # HA networking
+  networkPolicy:
+    enabled: true
+    ingressRules:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                name: ingress-nginx
+        ports:
+          - protocol: TCP
+            port: 8000
+
+  # HA pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 3
+
+# =============================================================================
+# Example 4: Multi-Tenant Deployment
+# =============================================================================
+multi-tenant:
+  # Image Configuration
+  image:
+    repository: your-registry.com/rag-api
+    tag: "v1.0.0"
+    pullPolicy: "Always"
+
+  # Multi-tenant scaling
+  replicaCount: 2
+
+  # Multi-tenant resources
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+  # Multi-tenant configuration
+  config:
+    elasticsearch:
+      url: "https://elasticsearch-mt:9200"
+      index: "rag-documents"
+      username: "elastic"
+      password: "secure-password"
+      sslVerify: true
+    
+    vllm:
+      endpoint: "http://vllm-mt:8000"
+      defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+    
+    api:
+      debug: false
+      logLevel: "INFO"
+      corsOrigins: ["*"]
+      rateLimit:
+        enabled: true
+        requestsPerMinute: 30
+        burstSize: 5
+
+  # Multi-tenant monitoring
+  monitoring:
+    serviceMonitor:
+      enabled: true
+    prometheusRule:
+      enabled: true
+      rules:
+        - alert: RAGAPIMultiTenantQuotaExceeded
+          expr: rag_api_requests_total > 1000
+          for: 5m
+          labels:
+            severity: warning
+
+  # Multi-tenant security
+  security:
+    podSecurityStandards:
+      level: "restricted"
+
+  # Multi-tenant scaling
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+# =============================================================================
+# Example 5: Edge/Remote Deployment
+# =============================================================================
+edge:
+  # Image Configuration
+  image:
+    repository: your-registry.com/rag-api
+    tag: "v1.0.0"
+    pullPolicy: "Always"
+
+  # Edge deployment
+  replicaCount: 1
+
+  # Edge resources (limited)
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  # Edge configuration
+  config:
+    elasticsearch:
+      url: "https://elasticsearch-edge:9200"
+      index: "rag-documents"
+      username: "elastic"
+      password: "edge-password"
+      timeout: 60
+      maxRetries: 5
+    
+    vllm:
+      endpoint: "http://vllm-edge:8000"
+      defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+      maxTokens: 1024
+      temperature: 0.7
+    
+    api:
+      debug: false
+      logLevel: "WARNING"
+      requestTimeout: 120
+      rateLimit:
+        enabled: true
+        requestsPerMinute: 20
+
+  # Edge monitoring (minimal)
+  monitoring:
+    serviceMonitor:
+      enabled: true
+      interval: "60s"
+    prometheusRule:
+      enabled: false
+
+  # Edge networking
+  networkPolicy:
+    enabled: true
+    ingressRules:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                name: edge-gateway
+        ports:
+          - protocol: TCP
+            port: 8000
+
+  # Edge scaling
+  hpa:
+    enabled: false
+
+# =============================================================================
+# Example 6: Testing/CI Deployment
+# =============================================================================
+testing:
+  # Image Configuration
+  image:
+    repository: rag-openshift-ai-api
+    tag: "test"
+    pullPolicy: "Always"
+
+  # Testing deployment
+  replicaCount: 1
+
+  # Testing resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  # Testing configuration
+  config:
+    elasticsearch:
+      url: "https://elasticsearch-test:9200"
+      index: "rag-documents-test"
+      username: "elastic"
+      password: "test-password"
+    
+    vllm:
+      endpoint: "http://vllm-test:8000"
+      defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+    
+    api:
+      debug: true
+      logLevel: "DEBUG"
+      corsOrigins: ["*"]
+
+  # Testing monitoring (disabled)
+  monitoring:
+    serviceMonitor:
+      enabled: false
+    prometheusRule:
+      enabled: false
+
+  # Testing security (relaxed)
+  security:
+    podSecurityStandards:
+      level: "baseline"
+
+  # Testing scaling (disabled)
+  hpa:
+    enabled: false
+
+  # Testing networking (open)
+  networkPolicy:
+    enabled: false
+
+# =============================================================================
+# Usage Instructions
+# =============================================================================
+# To use these examples:
+
+# 1. Development:
+# helm install rag-api-dev ./helm --namespace rag-dev --values values-examples.yaml --set-string config=development
+
+# 2. Production:
+# helm install rag-api-prod ./helm --namespace rag-prod --values values-examples.yaml --set-string config=production
+
+# 3. High Availability:
+# helm install rag-api-ha ./helm --namespace rag-ha --values values-examples.yaml --set-string config=high-availability
+
+# 4. Multi-Tenant:
+# helm install rag-api-mt ./helm --namespace rag-mt --values values-examples.yaml --set-string config=multi-tenant
+
+# 5. Edge:
+# helm install rag-api-edge ./helm --namespace rag-edge --values values-examples.yaml --set-string config=edge
+
+# 6. Testing:
+# helm install rag-api-test ./helm --namespace rag-test --values values-examples.yaml --set-string config=testing 

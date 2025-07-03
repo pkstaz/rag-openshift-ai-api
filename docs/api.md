@@ -1433,6 +1433,13 @@ The API exposes Prometheus metrics at `/api/v1/metrics`:
 - `/api/v1/metrics`: Prometheus metrics
 - `/api/v1/info`: API information and configuration
 
----
+## 📚 Additional Documentation
+
+- [Helm Installation Guide](HELM_INSTALLATION.md) - Complete Helm deployment guide
+- [OpenShift Deployment](OPENSHIFT.md) - Manual OpenShift deployment instructions
+- [Container Guide](CONTAINER.md) - Container build and optimization guide
+- [API Testing](API_TESTING.md) - Testing strategies and examples
+
+## Support
 
 For additional support or questions, please refer to the project documentation or contact the development team. 

@@ -112,9 +112,245 @@ ENV_METRICS_ENABLED=true
 ENV_SECRET_KEY=your-secret-key-change-in-production
 ```
 
-## 🚀 Manual Deployment
+## 🚀 Deployment Options
 
-### 1. Build Container Image (OpenShift 4.18+ Optimized)
+### Option 1: Helm Installation (Recommended)
+
+Helm provides the easiest and most flexible way to deploy the RAG API on OpenShift 4.18+.
+
+#### Prerequisites
+
+```bash
+# Install Helm 3.x
+curl https://get.helm.sh/helm-v3.12.0-linux-amd64.tar.gz | tar xz
+sudo mv linux-amd64/helm /usr/local/bin/
+
+# Verify Helm installation
+helm version
+
+# Add required repositories (if needed)
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+```
+
+#### Quick Installation
+
+**Option A: Using the installation script (Recommended)**
+
+```bash
+# Install development deployment
+./scripts/helm-install.sh -t development
+
+# Install production deployment
+./scripts/helm-install.sh -t production -n rag-prod
+
+# Install with custom namespace and release name
+./scripts/helm-install.sh -t production -n rag-prod -r rag-api-prod
+
+# Dry run to see what would be installed
+./scripts/helm-install.sh -t production -d
+```
+
+**Option B: Manual Helm installation**
+
+```bash
+# 1. Create namespace
+oc new-project rag-demo
+
+# 2. Install with default values
+helm install rag-api ./helm \
+  --namespace rag-demo \
+  --create-namespace
+
+# 3. Verify installation
+helm list -n rag-demo
+oc get all -l app.kubernetes.io/name=rag-api
+```
+
+#### Custom Installation
+
+```bash
+# 1. Create namespace
+oc new-project rag-demo
+
+# 2. Create custom values file
+cat > custom-values.yaml <<EOF
+# Image configuration
+image:
+  repository: your-registry.com/rag-api
+  tag: "latest"
+  pullPolicy: "Always"
+
+# Elasticsearch configuration
+config:
+  elasticsearch:
+    url: "https://your-elasticsearch:9200"
+    username: "elastic"
+    password: "your-password"
+
+# vLLM configuration
+config:
+  vllm:
+    endpoint: "http://your-vllm-service:8000"
+    defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+
+# Resource configuration
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# Replica configuration
+replicaCount: 3
+
+# Monitoring configuration
+monitoring:
+  serviceMonitor:
+    enabled: true
+  prometheusRule:
+    enabled: true
+EOF
+
+# 3. Install with custom values
+helm install rag-api ./helm \
+  --namespace rag-demo \
+  --create-namespace \
+  --values custom-values.yaml
+
+# 4. Verify installation
+helm status rag-api -n rag-demo
+```
+
+#### Advanced Configuration
+
+```bash
+# Install with specific configurations
+helm install rag-api ./helm \
+  --namespace rag-demo \
+  --create-namespace \
+  --set image.repository=your-registry.com/rag-api \
+  --set image.tag=latest \
+  --set replicaCount=3 \
+  --set config.elasticsearch.url=https://your-elasticsearch:9200 \
+  --set config.vllm.endpoint=http://your-vllm-service:8000 \
+  --set monitoring.serviceMonitor.enabled=true \
+  --set monitoring.prometheusRule.enabled=true \
+  --set security.podSecurityStandards.level=restricted \
+  --set openshift.scc.enabled=true
+```
+
+#### Helm Values Configuration
+
+The Helm chart supports extensive customization through values. See `helm/values.yaml` for complete configuration options.
+
+**Quick Examples:**
+
+```yaml
+# Basic configuration
+image:
+  repository: rag-openshift-ai-api
+  tag: "latest"
+
+config:
+  elasticsearch:
+    url: "https://elasticsearch:9200"
+    username: "elastic"
+    password: "your-password"
+  
+  vllm:
+    endpoint: "http://vllm-service:8000"
+    defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+```
+
+**Pre-configured Examples:**
+
+The project includes pre-configured examples for different deployment scenarios:
+
+- **Development**: `helm/values-examples.yaml#development`
+- **Production**: `helm/values-examples.yaml#production`
+- **High Availability**: `helm/values-examples.yaml#high-availability`
+- **Multi-Tenant**: `helm/values-examples.yaml#multi-tenant`
+- **Edge/Remote**: `helm/values-examples.yaml#edge`
+- **Testing/CI**: `helm/values-examples.yaml#testing`
+
+**Usage:**
+```bash
+# Install with production configuration
+helm install rag-api ./helm \
+  --namespace rag-prod \
+  --values helm/values-examples.yaml \
+  --set-string config=production
+
+# Install with development configuration
+helm install rag-api-dev ./helm \
+  --namespace rag-dev \
+  --values helm/values-examples.yaml \
+  --set-string config=development
+```
+
+#### Helm Operations
+
+```bash
+# Upgrade deployment
+helm upgrade rag-api ./helm \
+  --namespace rag-demo \
+  --values custom-values.yaml
+
+# Rollback to previous version
+helm rollback rag-api -n rag-demo
+
+# Uninstall deployment
+helm uninstall rag-api -n rag-demo
+
+# Get deployment status
+helm status rag-api -n rag-demo
+
+# List all releases
+helm list -n rag-demo
+
+# Get values
+helm get values rag-api -n rag-demo
+
+# Get manifest
+helm get manifest rag-api -n rag-demo
+```
+
+#### Troubleshooting Helm Installation
+
+```bash
+# Check Helm release status
+helm status rag-api -n rag-demo
+
+# Check pod status
+oc get pods -l app.kubernetes.io/name=rag-api -n rag-demo
+
+# Check events
+oc get events --sort-by='.lastTimestamp' -n rag-demo | grep rag-api
+
+# Check logs
+oc logs -l app.kubernetes.io/name=rag-api -n rag-demo --tail=50
+
+# Check Helm hooks
+helm get hooks rag-api -n rag-demo
+
+# Validate Helm chart
+helm lint ./helm
+```
+
+### Option 2: Manual Deployment
+
+#### 1. Build Container Image (OpenShift 4.18+ Optimized)
 
 ```bash
 # Build the container image with OpenShift 4.18+ optimizations
@@ -141,7 +377,7 @@ oc new-project rag-demo
 oc project rag-demo
 ```
 
-### 3. Deploy Complete Application
+#### 3. Deploy Complete Application
 
 ```bash
 # Deploy everything at once (recommended)
@@ -152,7 +388,7 @@ oc create serviceaccount rag-api-sa
 oc apply -f openshift/deployment.yaml
 ```
 
-### 4. Verify Deployment (OpenShift 4.18+)
+#### 4. Verify Deployment (OpenShift 4.18+)
 
 ```bash
 # Check deployment status
@@ -624,6 +860,14 @@ oc rollout status deployment/rag-api
 - **HIPAA**: Healthcare data security measures
 - **PCI DSS**: Payment card industry security standards
 - **Audit Logging**: Comprehensive audit trail
+
+## 📚 Additional Documentation
+
+- [Helm Installation Guide](docs/HELM_INSTALLATION.md) - Complete Helm deployment guide with examples
+- [API Documentation](docs/api.md) - Detailed API reference and examples
+- [OpenShift Deployment](docs/OPENSHIFT.md) - Manual OpenShift deployment instructions
+- [Container Guide](docs/CONTAINER.md) - Container build and optimization guide
+- [API Testing](docs/API_TESTING.md) - Testing strategies and examples
 
 ## 🔗 Related Projects
 
