@@ -15,7 +15,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default values
-NAMESPACE="rag-demo"
+NAMESPACE="rag-openshift-ai"
 RELEASE_NAME="rag-api"
 VALUES_FILE=""
 DEPLOYMENT_TYPE="development"
@@ -46,7 +46,7 @@ show_usage() {
 Usage: $0 [OPTIONS]
 
 Options:
-    -n, --namespace NAME       Namespace to deploy to (default: rag-demo)
+    -n, --namespace NAME       Namespace to deploy to (default: rag-openshift-ai)
     -r, --release NAME         Helm release name (default: rag-api)
     -t, --type TYPE            Deployment type: development, production, ha, multi-tenant, edge, testing (default: development)
     -v, --values FILE          Custom values file path

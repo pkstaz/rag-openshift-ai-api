@@ -155,15 +155,15 @@ helm repo update
 
 ```bash
 # 1. Create namespace
-oc new-project rag-demo
+oc new-project rag-openshift-ai
 
 # 2. Install with default values
 helm install rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --create-namespace
 
 # 3. Verify installation
-helm list -n rag-demo
+helm list -n rag-openshift-ai
 oc get all -l app.kubernetes.io/name=rag-api
 ```
 
@@ -171,7 +171,7 @@ oc get all -l app.kubernetes.io/name=rag-api
 
 ```bash
 # 1. Create namespace
-oc new-project rag-demo
+oc new-project rag-openshift-ai
 
 # 2. Create custom values file
 cat > custom-values.yaml <<EOF
@@ -216,12 +216,12 @@ EOF
 
 # 3. Install with custom values
 helm install rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --create-namespace \
   --values custom-values.yaml
 
 # 4. Verify installation
-helm status rag-api -n rag-demo
+helm status rag-api -n rag-openshift-ai
 ```
 
 #### Advanced Configuration
@@ -229,7 +229,7 @@ helm status rag-api -n rag-demo
 ```bash
 # Install with specific configurations
 helm install rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --create-namespace \
   --set image.repository=your-registry.com/rag-api \
   --set image.tag=latest \
@@ -304,45 +304,45 @@ helm install rag-api-dev ./helm \
 ```bash
 # Upgrade deployment
 helm upgrade rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --values custom-values.yaml
 
 # Rollback to previous version
-helm rollback rag-api -n rag-demo
+helm rollback rag-api -n rag-openshift-ai
 
 # Uninstall deployment
-helm uninstall rag-api -n rag-demo
+helm uninstall rag-api -n rag-openshift-ai
 
 # Get deployment status
-helm status rag-api -n rag-demo
+helm status rag-api -n rag-openshift-ai
 
 # List all releases
-helm list -n rag-demo
+helm list -n rag-openshift-ai
 
 # Get values
-helm get values rag-api -n rag-demo
+helm get values rag-api -n rag-openshift-ai
 
 # Get manifest
-helm get manifest rag-api -n rag-demo
+helm get manifest rag-api -n rag-openshift-ai
 ```
 
 #### Troubleshooting Helm Installation
 
 ```bash
 # Check Helm release status
-helm status rag-api -n rag-demo
+helm status rag-api -n rag-openshift-ai
 
 # Check pod status
-oc get pods -l app.kubernetes.io/name=rag-api -n rag-demo
+oc get pods -l app.kubernetes.io/name=rag-api -n rag-openshift-ai
 
 # Check events
-oc get events --sort-by='.lastTimestamp' -n rag-demo | grep rag-api
+oc get events --sort-by='.lastTimestamp' -n rag-openshift-ai | grep rag-api
 
 # Check logs
-oc logs -l app.kubernetes.io/name=rag-api -n rag-demo --tail=50
+oc logs -l app.kubernetes.io/name=rag-api -n rag-openshift-ai --tail=50
 
 # Check Helm hooks
-helm get hooks rag-api -n rag-demo
+helm get hooks rag-api -n rag-openshift-ai
 
 # Validate Helm chart
 helm lint ./helm
@@ -371,10 +371,10 @@ oc start-build rag-api --from-dir=. --follow
 
 ```bash
 # Create new project
-oc new-project rag-demo
+oc new-project rag-openshift-ai
 
 # Or use existing project
-oc project rag-demo
+oc project rag-openshift-ai
 ```
 
 #### 3. Deploy Complete Application
@@ -452,27 +452,19 @@ pytest tests/integration/ -m "performance" -v
 ### API Testing
 
 ```bash
-# Quick health check
-curl http://localhost:8000/health
+# Health check
+curl https://rag-api-rag-openshift-ai.apps.your-cluster.com/health
 
-# Basic query
-curl -X POST http://localhost:8000/api/v1/query \
+# Query with authentication (if enabled)
+curl -X POST https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/query \
   -H "Content-Type: application/json" \
   -d '{
     "query": "What is OpenShift?",
     "top_k": 3
   }'
 
-# With filters
-curl -X POST http://localhost:8000/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "Kubernetes platform",
-    "top_k": 2,
-    "filters": {
-      "category": "cloud"
-    }
-  }'
+# Get metrics
+curl https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/metrics
 ```
 
 ## 📊 Monitoring & Observability (OpenShift 4.18+)
@@ -747,10 +739,10 @@ For detailed API documentation, see [docs/api.md](docs/api.md).
 
 ```bash
 # Health check
-curl https://rag-api-rag-demo.apps.your-cluster.com/health
+curl https://rag-api-rag-openshift-ai.apps.your-cluster.com/health
 
 # Query with authentication (if enabled)
-curl -X POST https://rag-api-rag-demo.apps.your-cluster.com/api/v1/query \
+curl -X POST https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/query \
   -H "Content-Type: application/json" \
   -d '{
     "query": "What is OpenShift?",
@@ -758,7 +750,7 @@ curl -X POST https://rag-api-rag-demo.apps.your-cluster.com/api/v1/query \
   }'
 
 # Get metrics
-curl https://rag-api-rag-demo.apps.your-cluster.com/api/v1/metrics
+curl https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/metrics
 ```
 
 ## 🤝 Contributing
@@ -834,7 +826,7 @@ oc apply -f openshift/deployment.yaml
 #### Alternative: OpenShift Build Strategy
 ```bash
 # 1. Create namespace and project
-oc new-project rag-demo
+oc new-project rag-openshift-ai
 
 # 2. Apply deployment configuration
 oc apply -f openshift/deployment.yaml

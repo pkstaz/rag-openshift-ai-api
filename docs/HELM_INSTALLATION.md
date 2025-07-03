@@ -39,14 +39,14 @@ cd rag-openshift-ai-api
 ### 2. Create Namespace
 
 ```bash
-oc new-project rag-demo
+oc new-project rag-openshift-ai
 ```
 
 ### 3. Install with Default Values
 
 ```bash
 helm install rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --create-namespace
 ```
 
@@ -54,7 +54,7 @@ helm install rag-api ./helm \
 
 ```bash
 # Check Helm release
-helm list -n rag-demo
+helm list -n rag-openshift-ai
 
 # Check resources
 oc get all -l app.kubernetes.io/name=rag-api
@@ -220,7 +220,7 @@ openshift:
     priority: 10
   route:
     enabled: true
-    host: "rag-api-rag-demo.apps.your-cluster.com"
+    host: "rag-api-rag-openshift-ai.apps.your-cluster.com"
     tls:
       enabled: true
       termination: edge
@@ -289,7 +289,7 @@ podDisruptionBudget:
 
 ```bash
 helm install rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --create-namespace
 ```
 
@@ -297,7 +297,7 @@ helm install rag-api ./helm \
 
 ```bash
 helm install rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --create-namespace \
   --values custom-values.yaml
 ```
@@ -306,7 +306,7 @@ helm install rag-api ./helm \
 
 ```bash
 helm install rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --create-namespace \
   --set image.repository=your-registry.com/rag-api \
   --set image.tag=latest \
@@ -328,7 +328,7 @@ oc create secret docker-registry your-registry-secret \
 
 # Install with registry secret
 helm install rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --create-namespace \
   --set image.pullSecrets[0].name=your-registry-secret
 ```
@@ -340,12 +340,12 @@ helm install rag-api ./helm \
 ```bash
 # Upgrade with new values
 helm upgrade rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --values custom-values.yaml
 
 # Upgrade with specific overrides
 helm upgrade rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --set image.tag=new-version \
   --set replicaCount=4
 ```
@@ -354,42 +354,42 @@ helm upgrade rag-api ./helm \
 
 ```bash
 # List revisions
-helm history rag-api -n rag-demo
+helm history rag-api -n rag-openshift-ai
 
 # Rollback to previous version
-helm rollback rag-api -n rag-demo
+helm rollback rag-api -n rag-openshift-ai
 
 # Rollback to specific revision
-helm rollback rag-api 2 -n rag-demo
+helm rollback rag-api 2 -n rag-openshift-ai
 ```
 
 ### Uninstall Deployment
 
 ```bash
 # Uninstall with cleanup
-helm uninstall rag-api -n rag-demo
+helm uninstall rag-api -n rag-openshift-ai
 
 # Uninstall and keep resources
-helm uninstall rag-api -n rag-demo --keep-history
+helm uninstall rag-api -n rag-openshift-ai --keep-history
 ```
 
 ### Get Information
 
 ```bash
 # Get release status
-helm status rag-api -n rag-demo
+helm status rag-api -n rag-openshift-ai
 
 # Get values
-helm get values rag-api -n rag-demo
+helm get values rag-api -n rag-openshift-ai
 
 # Get manifest
-helm get manifest rag-api -n rag-demo
+helm get manifest rag-api -n rag-openshift-ai
 
 # Get hooks
-helm get hooks rag-api -n rag-demo
+helm get hooks rag-api -n rag-openshift-ai
 
 # Get notes
-helm get notes rag-api -n rag-demo
+helm get notes rag-api -n rag-openshift-ai
 ```
 
 ## Troubleshooting
@@ -400,29 +400,29 @@ helm get notes rag-api -n rag-demo
 
 ```bash
 # Check pod status
-oc get pods -l app.kubernetes.io/name=rag-api -n rag-demo
+oc get pods -l app.kubernetes.io/name=rag-api -n rag-openshift-ai
 
 # Check pod events
-oc describe pod <pod-name> -n rag-demo
+oc describe pod <pod-name> -n rag-openshift-ai
 
 # Check logs
-oc logs <pod-name> -n rag-demo
+oc logs <pod-name> -n rag-openshift-ai
 
 # Check Helm release status
-helm status rag-api -n rag-demo
+helm status rag-api -n rag-openshift-ai
 ```
 
 #### 2. Image Pull Issues
 
 ```bash
 # Check image pull secret
-oc get secret your-registry-secret -n rag-demo
+oc get secret your-registry-secret -n rag-openshift-ai
 
 # Test image pull
 oc run test-pod --image=your-registry.com/rag-api:latest --rm -it
 
 # Check events
-oc get events --sort-by='.lastTimestamp' -n rag-demo | grep -i image
+oc get events --sort-by='.lastTimestamp' -n rag-openshift-ai | grep -i image
 ```
 
 #### 3. Configuration Issues
@@ -433,41 +433,41 @@ helm lint ./helm
 
 # Dry run installation
 helm install rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --dry-run \
   --values custom-values.yaml
 
 # Check ConfigMap
-oc get configmap rag-api-config -n rag-demo -o yaml
+oc get configmap rag-api-config -n rag-openshift-ai -o yaml
 
 # Check Secret
-oc get secret rag-api-secret -n rag-demo -o yaml
+oc get secret rag-api-secret -n rag-openshift-ai -o yaml
 ```
 
 #### 4. Network Issues
 
 ```bash
 # Check Network Policies
-oc get networkpolicy -n rag-demo
+oc get networkpolicy -n rag-openshift-ai
 
 # Test connectivity
-oc exec <pod-name> -n rag-demo -- curl https://elasticsearch:9200/_cluster/health
+oc exec <pod-name> -n rag-openshift-ai -- curl https://elasticsearch:9200/_cluster/health
 
 # Check routes
-oc get routes -n rag-demo
+oc get routes -n rag-openshift-ai
 ```
 
 #### 5. Monitoring Issues
 
 ```bash
 # Check Service Monitor
-oc get servicemonitor rag-api-monitor -n rag-demo
+oc get servicemonitor rag-api-monitor -n rag-openshift-ai
 
 # Check Prometheus Rules
-oc get prometheusrule rag-api-alerts -n rag-demo
+oc get prometheusrule rag-api-alerts -n rag-openshift-ai
 
 # Check metrics endpoint
-oc exec <pod-name> -n rag-demo -- curl http://localhost:8000/api/v1/metrics
+oc exec <pod-name> -n rag-openshift-ai -- curl http://localhost:8000/api/v1/metrics
 ```
 
 ### Debug Commands
@@ -475,21 +475,21 @@ oc exec <pod-name> -n rag-demo -- curl http://localhost:8000/api/v1/metrics
 ```bash
 # Enable debug logging
 helm upgrade rag-api ./helm \
-  --namespace rag-demo \
+  --namespace rag-openshift-ai \
   --set config.api.debug=true \
   --set config.api.logLevel=DEBUG
 
 # Check all resources
-oc get all -l app.kubernetes.io/name=rag-api -n rag-demo
+oc get all -l app.kubernetes.io/name=rag-api -n rag-openshift-ai
 
 # Check events
-oc get events --sort-by='.lastTimestamp' -n rag-demo | grep rag-api
+oc get events --sort-by='.lastTimestamp' -n rag-openshift-ai | grep rag-api
 
 # Check resource usage
-oc top pods -l app.kubernetes.io/name=rag-api -n rag-demo
+oc top pods -l app.kubernetes.io/name=rag-api -n rag-openshift-ai
 
 # Check HPA status
-oc get hpa rag-api-hpa -n rag-demo
+oc get hpa rag-api-hpa -n rag-openshift-ai
 ```
 
 ## Best Practices
