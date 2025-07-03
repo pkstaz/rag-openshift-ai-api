@@ -1,16 +1,28 @@
 #!/bin/bash
 
 # =============================================================================
-# Quick Deploy Script for RAG OpenShift AI API
+# RAG OpenShift AI API - Quick Deploy Script
 # =============================================================================
+# Complete deployment pipeline for OpenShift
 
 set -e
 
-# Colors
+# Colors for output
+RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
+# Default values
+NAMESPACE="rag-openshift-ai"
+RELEASE_NAME="rag-api"
+BUILD_IMAGE=true
+PUSH_IMAGE=false
+REGISTRY=""
+IMAGE_TAG="latest"
+
+# Function to print colored output
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -19,98 +31,187 @@ print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-# Default values
-NAMESPACE=${1:-"rag-project"}
-ELASTICSEARCH_URL=${2:-"http://elasticsearch:9200"}
-VLLM_URL=${3:-"http://vllm-server:8001"}
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
 
-print_info "Quick Deploy RAG OpenShift AI API"
-print_info "Namespace: $NAMESPACE"
-print_info "ElasticSearch: $ELASTICSEARCH_URL"
-print_info "vLLM: $VLLM_URL"
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
 
-# Check if oc is available
-if ! command -v oc &> /dev/null; then
-    echo "Error: OpenShift CLI (oc) is not installed"
-    exit 1
-fi
+# Function to show usage
+show_usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -n, --namespace NAMESPACE    Target namespace (default: rag-openshift-ai)"
+    echo "  -r, --release RELEASE        Release name (default: rag-api)"
+    echo "  --no-build                   Skip image build"
+    echo "  --push                       Push image to registry"
+    echo "  --registry REGISTRY          Registry URL for pushing"
+    echo "  --tag TAG                    Image tag (default: latest)"
+    echo "  -h, --help                   Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                                    # Complete deployment"
+    echo "  $0 -n my-namespace --push             # Deploy with image push"
+    echo "  $0 --no-build                         # Deploy without building"
+}
 
-# Check if logged in
-if ! oc whoami &> /dev/null; then
-    echo "Error: Not logged in to OpenShift. Run: oc login"
-    exit 1
-fi
+# Function to check prerequisites
+check_prerequisites() {
+    print_info "Checking prerequisites..."
+    
+    # Check if OpenShift CLI is available
+    if ! command -v oc &> /dev/null; then
+        print_error "OpenShift CLI (oc) is not installed. Please install it first."
+        exit 1
+    fi
+    
+    # Check if logged in to OpenShift
+    if ! oc whoami &> /dev/null; then
+        print_error "Not logged in to OpenShift. Please run 'oc login' first."
+        exit 1
+    fi
+    
+    # Check if namespace exists
+    if ! oc get namespace $NAMESPACE &> /dev/null; then
+        print_warning "Namespace $NAMESPACE does not exist. Creating it..."
+        oc new-project $NAMESPACE
+    fi
+    
+    print_success "Prerequisites check completed"
+}
 
-# Create namespace if it doesn't exist
-if ! oc get namespace $NAMESPACE &> /dev/null; then
-    print_info "Creating namespace: $NAMESPACE"
-    oc new-project $NAMESPACE --display-name="RAG API Project"
-fi
+# Function to build and push image
+build_and_push_image() {
+    if [ "$BUILD_IMAGE" = true ]; then
+        print_info "Building container image..."
+        
+        # Build image using the build script
+        if [ -n "$REGISTRY" ]; then
+            ./scripts/build-docker.sh \
+                --registry "$REGISTRY" \
+                --tag "$IMAGE_TAG" \
+                --push
+        else
+            ./scripts/build-docker.sh \
+                --tag "$IMAGE_TAG"
+        fi
+        
+        print_success "Image build completed"
+    fi
+}
 
-# Deploy using oc new-app
-print_info "Deploying application..."
-oc new-app \
-    --name=rag-api \
-    --strategy=docker \
-    --dockerfile=Containerfile \
-    --source=https://github.com/your-repo/rag-openshift-ai-api.git \
-    --context-dir=. \
-    -n $NAMESPACE
+# Function to deploy with Helm
+deploy_with_helm() {
+    print_info "Deploying with Helm..."
+    
+    # Deploy using Helm install script
+    ./scripts/helm-install.sh \
+        -n "$NAMESPACE" \
+        -r "$RELEASE_NAME" \
+        --no-wait
+    
+    print_success "Helm deployment completed"
+}
 
-# Set environment variables
-print_info "Configuring environment variables..."
-oc set env dc/rag-api \
-    ELASTICSEARCH_URL=$ELASTICSEARCH_URL \
-    VLLM_URL=$VLLM_URL \
-    LOG_LEVEL=INFO \
-    ENVIRONMENT=production \
-    -n $NAMESPACE
+# Function to verify deployment
+verify_deployment() {
+    print_info "Verifying deployment..."
+    
+    # Wait for deployment to be ready
+    oc rollout status deployment/"$RELEASE_NAME" -n "$NAMESPACE"
+    
+    # Check service
+    oc get service "$RELEASE_NAME" -n "$NAMESPACE"
+    
+    # Check route
+    oc get route "$RELEASE_NAME" -n "$NAMESPACE"
+    
+    print_success "Deployment verification completed"
+}
 
-# Set resource limits
-print_info "Setting resource limits..."
-oc set resources dc/rag-api \
-    --requests=cpu=500m,memory=1Gi \
-    --limits=cpu=2000m,memory=4Gi \
-    -n $NAMESPACE
+# Function to show deployment info
+show_deployment_info() {
+    print_info "Deployment completed successfully!"
+    echo
+    echo "Namespace: $NAMESPACE"
+    echo "Release: $RELEASE_NAME"
+    echo
+    echo "Next steps:"
+    echo "  # Check deployment status"
+    echo "  oc get all -l app.kubernetes.io/name=$RELEASE_NAME -n $NAMESPACE"
+    echo
+    echo "  # Get route URL"
+    echo "  oc get route $RELEASE_NAME -n $NAMESPACE -o jsonpath='{.spec.host}'"
+    echo
+    echo "  # Check logs"
+    echo "  oc logs -l app.kubernetes.io/name=$RELEASE_NAME -n $NAMESPACE -f"
+    echo
+    echo "  # Test API"
+    echo "  curl https://$(oc get route $RELEASE_NAME -n $NAMESPACE -o jsonpath='{.spec.host}')/health"
+}
 
-# Add health checks
-print_info "Adding health checks..."
-oc set probe dc/rag-api \
-    --liveness \
-    --get-url=http://:8000/health \
-    --initial-delay-seconds=60 \
-    --period-seconds=30 \
-    -n $NAMESPACE
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -n|--namespace)
+            NAMESPACE="$2"
+            shift 2
+            ;;
+        -r|--release)
+            RELEASE_NAME="$2"
+            shift 2
+            ;;
+        --no-build)
+            BUILD_IMAGE=false
+            shift
+            ;;
+        --push)
+            PUSH_IMAGE=true
+            shift
+            ;;
+        --registry)
+            REGISTRY="$2"
+            shift 2
+            ;;
+        --tag)
+            IMAGE_TAG="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            print_error "Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
 
-oc set probe dc/rag-api \
-    --readiness \
-    --get-url=http://:8000/ready \
-    --initial-delay-seconds=30 \
-    --period-seconds=10 \
-    -n $NAMESPACE
+# Main execution
+main() {
+    print_info "RAG OpenShift AI API - Quick Deploy Script"
+    echo
+    
+    # Check prerequisites
+    check_prerequisites
+    
+    # Build and push image
+    build_and_push_image
+    
+    # Deploy with Helm
+    deploy_with_helm
+    
+    # Verify deployment
+    verify_deployment
+    
+    # Show deployment info
+    show_deployment_info
+}
 
-# Expose service
-print_info "Exposing service..."
-oc expose dc/rag-api --port=8000 -n $NAMESPACE
-oc expose svc/rag-api -n $NAMESPACE
-
-# Wait for deployment
-print_info "Waiting for deployment to complete..."
-oc rollout status dc/rag-api -n $NAMESPACE --timeout=10m
-
-# Get route URL
-ROUTE_URL=$(oc get route rag-api -n $NAMESPACE -o jsonpath='{.spec.host}')
-
-print_success "Deployment completed!"
-echo ""
-echo "Application Information:"
-echo "  Namespace: $NAMESPACE"
-echo "  Route: https://$ROUTE_URL"
-echo "  API Docs: https://$ROUTE_URL/docs"
-echo "  Health Check: https://$ROUTE_URL/health"
-echo "  Metrics: https://$ROUTE_URL/metrics"
-echo ""
-echo "Useful commands:"
-echo "  oc logs -f dc/rag-api -n $NAMESPACE    # View logs"
-echo "  oc get pods -n $NAMESPACE              # List pods"
-echo "  oc get route rag-api -n $NAMESPACE     # Get route info" 
+# Run main function
+main "$@" 

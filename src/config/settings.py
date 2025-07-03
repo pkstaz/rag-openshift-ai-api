@@ -129,26 +129,13 @@ class RAGSettings(BaseSettings):
         env_file = ".env"
 
 
-class EnvironmentSettings(BaseSettings):
-    """Environment and deployment settings."""
-    
-    environment: str = Field(default="development", description="Environment name")
-    metrics_enabled: bool = Field(default=True, description="Enable Prometheus metrics")
-    
-    # Security
+class EnvironmentConfig(BaseSettings):
+    """Environment configuration."""
     secret_key: str = Field(
-        default="your-secret-key-change-in-production", 
-        description="Secret key for JWT tokens"
+        default="your-secret-key-change-this-in-deployment",
+        description="Secret key for application"
     )
-    algorithm: str = Field(default="HS256", description="JWT algorithm")
-    access_token_expire_minutes: int = Field(
-        default=30, 
-        description="Access token expiration time"
-    )
-    
-    class Config:
-        env_prefix = "ENV_"
-        env_file = ".env"
+    metrics_enabled: bool = Field(default=True, description="Enable metrics collection")
 
 
 class Settings(BaseSettings):
@@ -159,7 +146,7 @@ class Settings(BaseSettings):
     vllm: VLLMSettings = Field(default_factory=VLLMSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     rag: RAGSettings = Field(default_factory=RAGSettings)
-    environment: EnvironmentSettings = Field(default_factory=EnvironmentSettings)
+    environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     
     class Config:
         env_file = ".env"

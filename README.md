@@ -106,10 +106,9 @@ RAG_SEARCH_TYPE=vector
 RAG_CHUNK_SIZE=1000
 RAG_CHUNK_OVERLAP=200
 
-# Environment Configuration
-ENV_ENVIRONMENT=production
+# Application Configuration
+ENV_SECRET_KEY=your-secret-key-change-this-in-deployment
 ENV_METRICS_ENABLED=true
-ENV_SECRET_KEY=your-secret-key-change-in-production
 ```
 
 ## 🚀 Deployment Options
@@ -156,17 +155,14 @@ helm repo update
 **Option A: Using the installation script (Recommended)**
 
 ```bash
-# Install development deployment
-./scripts/helm-install.sh -t development
-
-# Install production deployment
-./scripts/helm-install.sh -t production -n rag-prod
+# Install with default settings
+./scripts/helm-install.sh
 
 # Install with custom namespace and release name
-./scripts/helm-install.sh -t production -n rag-prod -r rag-api-prod
+./scripts/helm-install.sh -n rag-prod -r rag-api-prod
 
 # Dry run to see what would be installed
-./scripts/helm-install.sh -t production -d
+./scripts/helm-install.sh -d
 ```
 
 **Option B: Manual Helm installation**
@@ -200,17 +196,15 @@ image:
   pullPolicy: "Always"
 
 # Elasticsearch configuration
-config:
-  elasticsearch:
-    url: "https://your-elasticsearch:9200"
-    username: "elastic"
-    password: "your-password"
+elasticsearch:
+  url: "https://your-elasticsearch:9200"
+  username: "elastic"
+  password: "your-password"
 
 # vLLM configuration
-config:
-  vllm:
-    endpoint: "http://your-vllm-service:8000"
-    defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+vllm:
+  endpoint: "http://your-vllm-service:8000"
+  defaultModel: "RedHatAI/granite-3.1-8b-instruct"
 
 # Resource configuration
 resources:
@@ -221,8 +215,9 @@ resources:
     cpu: "2000m"
     memory: "4Gi"
 
-# Replica configuration
-replicaCount: 3
+# Application configuration
+app:
+  replicas: 3
 
 # Monitoring configuration
 monitoring:
@@ -251,119 +246,12 @@ helm install rag-api ./helm \
   --create-namespace \
   --set image.repository=your-registry.com/rag-api \
   --set image.tag=latest \
-  --set replicaCount=3 \
-  --set config.elasticsearch.url=https://your-elasticsearch:9200 \
-  --set config.vllm.endpoint=http://your-vllm-service:8000 \
+  --set app.replicas=3 \
+  --set elasticsearch.url=https://your-elasticsearch:9200 \
+  --set vllm.endpoint=http://your-vllm-service:8000 \
   --set monitoring.serviceMonitor.enabled=true \
   --set monitoring.prometheusRule.enabled=true \
-  --set security.podSecurityStandards.level=restricted \
-  --set openshift.scc.enabled=true
-```
-
-#### Helm Values Configuration
-
-The Helm chart supports extensive customization through values. See `helm/values.yaml` for complete configuration options.
-
-**Quick Examples:**
-
-```yaml
-# Basic configuration
-image:
-  repository: rag-openshift-ai-api
-  tag: "latest"
-
-config:
-  elasticsearch:
-    url: "https://elasticsearch:9200"
-    username: "elastic"
-    password: "your-password"
-  
-  vllm:
-    endpoint: "http://vllm-service:8000"
-    defaultModel: "RedHatAI/granite-3.1-8b-instruct"
-
-resources:
-  requests:
-    cpu: 500m
-    memory: 1Gi
-  limits:
-    cpu: 2000m
-    memory: 4Gi
-```
-
-**Pre-configured Examples:**
-
-The project includes pre-configured examples for different deployment scenarios:
-
-- **Development**: `helm/values-examples.yaml#development`
-- **Production**: `helm/values-examples.yaml#production`
-- **High Availability**: `helm/values-examples.yaml#high-availability`
-- **Multi-Tenant**: `helm/values-examples.yaml#multi-tenant`
-- **Edge/Remote**: `helm/values-examples.yaml#edge`
-- **Testing/CI**: `helm/values-examples.yaml#testing`
-
-**Usage:**
-```bash
-# Install with production configuration
-helm install rag-api ./helm \
-  --namespace rag-prod \
-  --values helm/values-examples.yaml \
-  --set-string config=production
-
-# Install with development configuration
-helm install rag-api-dev ./helm \
-  --namespace rag-dev \
-  --values helm/values-examples.yaml \
-  --set-string config=development
-```
-
-#### Helm Operations
-
-```bash
-# Upgrade deployment
-helm upgrade rag-api ./helm \
-  --namespace rag-openshift-ai \
-  --values custom-values.yaml
-
-# Rollback to previous version
-helm rollback rag-api -n rag-openshift-ai
-
-# Uninstall deployment
-helm uninstall rag-api -n rag-openshift-ai
-
-# Get deployment status
-helm status rag-api -n rag-openshift-ai
-
-# List all releases
-helm list -n rag-openshift-ai
-
-# Get values
-helm get values rag-api -n rag-openshift-ai
-
-# Get manifest
-helm get manifest rag-api -n rag-openshift-ai
-```
-
-#### Troubleshooting Helm Installation
-
-```bash
-# Check Helm release status
-helm status rag-api -n rag-openshift-ai
-
-# Check pod status
-oc get pods -l app.kubernetes.io/name=rag-api -n rag-openshift-ai
-
-# Check events
-oc get events --sort-by='.lastTimestamp' -n rag-openshift-ai | grep rag-api
-
-# Check logs
-oc logs -l app.kubernetes.io/name=rag-api -n rag-openshift-ai --tail=50
-
-# Check Helm hooks
-helm get hooks rag-api -n rag-openshift-ai
-
-# Validate Helm chart
-helm lint ./helm
+  --set security.runAsNonRoot=true
 ```
 
 ### Option 2: Manual Deployment
@@ -781,183 +669,3 @@ oc top pods -l app=rag-api
 # Check resource limits
 oc describe pod <pod-name> | grep -A 10 "Limits:"
 ```
-
-#### 5. Connection Issues
-
-```bash
-# Test ElasticSearch connection
-oc exec <pod-name> -- curl http://elasticsearch:9200/_cluster/health
-
-# Test vLLM connection
-oc exec <pod-name> -- curl http://vllm-server:8001/v1/models
-```
-
-### Debug Commands
-
-```bash
-# Enable debug logging
-oc set env deployment/rag-api API_DEBUG=true
-
-# Restart deployment
-oc rollout restart deployment rag-api
-
-# Check rollout status
-oc rollout status deployment rag-api
-
-# Rollback if needed
-oc rollout undo deployment rag-api
-```
-
-## 📚 API Documentation
-
-For detailed API documentation, see [docs/api.md](docs/api.md).
-
-### Quick API Examples
-
-```bash
-# Health check
-curl https://rag-api-rag-openshift-ai.apps.your-cluster.com/health
-
-# Query with authentication (if enabled)
-curl -X POST https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What is OpenShift?",
-    "top_k": 3
-  }'
-
-# Get metrics
-curl https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/metrics
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Run the test suite
-6. Submit a pull request
-
-### Development Setup
-
-```bash
-# Install development dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-# Run tests
-pytest
-
-# Run linting
-flake8 src/ tests/
-
-# Run type checking
-mypy src/
-```
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/your-org/rag-openshift-ai-api/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/rag-openshift-ai-api/discussions)
-
-## 🚀 OpenShift 4.18+ Specific Features
-
-### Enhanced Security
-
-- **Security Context Constraints (SCC)**: Custom SCC for maximum security
-- **Pod Security Standards**: Restricted level compliance
-- **Network Policies**: Granular network control
-- **Seccomp Profiles**: RuntimeDefault for container isolation
-- **Capability Restrictions**: All unnecessary capabilities dropped
-
-### Advanced Monitoring
-
-- **ServiceMonitor**: Automatic Prometheus integration
-- **PrometheusRule**: Pre-configured alerts
-- **Grafana Dashboard**: Ready-to-use monitoring dashboard
-- **Structured Logging**: JSON-formatted logs with correlation IDs
-- **Performance Metrics**: CPU, memory, and custom metrics
-
-### Enterprise Features
-
-- **Horizontal Pod Autoscaler**: Automatic scaling based on metrics
-- **Pod Disruption Budget**: High availability during updates
-- **Resource Quotas**: Resource management and limits
-- **Limit Ranges**: Default resource constraints
-- **Affinity Rules**: Pod distribution across nodes
-
-### Deployment
-
-#### Complete Deployment (Recommended)
-```bash
-# Deploy everything at once
-oc apply -f openshift/deployment.yaml
-```
-
-#### Alternative: OpenShift Build Strategy
-```bash
-# 1. Create namespace and project
-oc new-project rag-openshift-ai
-
-# 2. Apply deployment configuration
-oc apply -f openshift/deployment.yaml
-
-# 3. Build and deploy using OpenShift build
-# Note: Execute these commands separately, not together
-
-# Option 1: Using Containerfile (recommended)
-# Step 1: Create build configuration
-oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
-
-# Step 2: Start the build
-oc start-build rag-api --from-dir=. --follow
-
-# Option 2: Using Dockerfile (for compatibility)
-# Step 1: Create build configuration
-oc new-build --strategy=docker --binary --name=rag-api
-
-# Step 2: Start the build
-oc start-build rag-api --from-dir=. --follow
-
-# Step 3: Wait for deployment
-oc rollout status deployment/rag-api
-```
-
-### OpenShift Console Integration
-
-- **Web Console**: Full integration with OpenShift web interface
-- **CLI Tools**: Enhanced `oc` commands for RAG API management
-- **Monitoring Stack**: Native Prometheus/Grafana integration
-- **Logging**: Centralized logging with OpenShift logging stack
-- **Metrics**: Built-in metrics collection and visualization
-
-### Compliance and Governance
-
-- **SOC 2 Type II**: Ready configurations for compliance
-- **GDPR**: Data protection and privacy controls
-- **HIPAA**: Healthcare data security measures
-- **PCI DSS**: Payment card industry security standards
-- **Audit Logging**: Comprehensive audit trail
-
-## 📚 Additional Documentation
-
-- [Helm Installation Guide](docs/HELM_INSTALLATION.md) - Complete Helm deployment guide with examples
-- [API Documentation](docs/api.md) - Detailed API reference and examples
-- [OpenShift Deployment](docs/OPENSHIFT.md) - Manual OpenShift deployment instructions
-- [Container Guide](docs/CONTAINER.md) - Container build and optimization guide
-- [API Testing](docs/API_TESTING.md) - Testing strategies and examples
-
-## 🔗 Related Projects
-
-- [ElasticSearch](https://www.elastic.co/elasticsearch/)
-- [vLLM](https://github.com/vllm-project/vllm)
-- [FastAPI](https://fastapi.tiangolo.com/)
-- [OpenShift](https://www.redhat.com/en/technologies/cloud-computing/openshift)
-- [Red Hat UBI](https://developers.redhat.com/products/ubi/overview)
-- [Prometheus Operator](https://prometheus-operator.dev/)

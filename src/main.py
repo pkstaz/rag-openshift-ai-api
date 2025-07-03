@@ -10,6 +10,7 @@ import time
 import traceback
 from contextlib import asynccontextmanager
 from typing import Dict, Any
+from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -449,48 +450,43 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 # =============================================================================
-# Development Endpoints
+# Debug Endpoints (if debug mode is enabled)
 # =============================================================================
 
-if settings.environment == "development":
-    
+if settings.api.debug:
     @app.get("/debug/info", tags=["Debug"])
     async def debug_info():
-        """Debug information endpoint (development only)."""
+        """Debug information endpoint (debug mode only)."""
         return {
-            "app_info": {
-                "version": settings.api.version,
-                "environment": settings.environment,
-                "startup_time": _startup_time,
-                "uptime": time.time() - _startup_time
-            },
-            "settings": {
-                "api_host": settings.api.host,
-                "api_port": settings.api.port,
-                "elasticsearch_url": settings.elasticsearch.url,
-                "vllm_url": settings.vllm.url,
-                "embedding_model": settings.embeddings.model_name
-            },
-            "health": {
-                "rag_agent": get_rag_health(),
-                "embeddings": get_embedding_health(),
-                "retriever": get_retriever_health()
-            },
-            "metrics": get_metrics_summary()
+            "title": settings.api.title,
+            "version": settings.api.version,
+            "description": settings.api.description,
+            "host": settings.api.host,
+            "port": settings.api.port,
+            "log_level": settings.api.log_level,
+            "debug": settings.api.debug,
+            "cors_enabled": settings.api.cors_enabled,
+            "cors_origins": settings.api.cors_origins,
+            "elasticsearch_url": settings.elasticsearch.url,
+            "vllm_url": settings.vllm.url,
+            "embedding_model": settings.embedding.model_name,
+            "embedding_device": settings.embedding.device,
+            "rag_top_k": settings.rag.top_k,
+            "rag_similarity_threshold": settings.rag.similarity_threshold,
+            "metrics_enabled": settings.environment.metrics_enabled,
+            "timestamp": datetime.utcnow().isoformat()
         }
-    
+
     @app.get("/debug/settings", tags=["Debug"])
     async def debug_settings():
-        """Debug settings endpoint (development only)."""
+        """Debug settings endpoint (debug mode only)."""
         return {
             "api": settings.api.dict(),
             "elasticsearch": settings.elasticsearch.dict(),
             "vllm": settings.vllm.dict(),
-            "embeddings": settings.embeddings.dict(),
+            "embedding": settings.embedding.dict(),
             "rag": settings.rag.dict(),
-            "logging": settings.logging.dict(),
-            "metrics": settings.metrics.dict(),
-            "environment": settings.environment
+            "environment": settings.environment.dict()
         }
 
 

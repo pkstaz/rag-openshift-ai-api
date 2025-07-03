@@ -3,7 +3,7 @@
 # =============================================================================
 # RAG OpenShift AI API - Helm Installation Script
 # =============================================================================
-# This script provides easy Helm installation for different deployment scenarios
+# Automated Helm deployment for OpenShift/Kubernetes
 
 set -e
 
@@ -17,11 +17,12 @@ NC='\033[0m' # No Color
 # Default values
 NAMESPACE="rag-openshift-ai"
 RELEASE_NAME="rag-api"
-VALUES_FILE=""
-DEPLOYMENT_TYPE="development"
-HELM_CHART_PATH="./helm"
+VALUES_FILE="helm/values.yaml"
 DRY_RUN=false
-FORCE=false
+WAIT_FOR_READY=true
+PORT_FORWARD=false
+TAIL_LOGS=false
+ROLLBACK_ON_FAILURE=true
 
 # Function to print colored output
 print_info() {
@@ -42,41 +43,24 @@ print_error() {
 
 # Function to show usage
 show_usage() {
-    cat << EOF
-Usage: $0 [OPTIONS]
-
-Options:
-    -n, --namespace NAME       Namespace to deploy to (default: rag-openshift-ai)
-    -r, --release NAME         Helm release name (default: rag-api)
-    -t, --type TYPE            Deployment type: development, production, ha, multi-tenant, edge, testing (default: development)
-    -v, --values FILE          Custom values file path
-    -c, --chart PATH           Helm chart path (default: ./helm)
-    -d, --dry-run              Dry run mode (don't actually install)
-    -f, --force                Force installation (skip confirmation)
-    -h, --help                 Show this help message
-
-Deployment Types:
-    development     - Single replica, minimal resources, debug enabled
-    production      - Multiple replicas, production resources, monitoring enabled
-    ha              - High availability deployment with 5+ replicas
-    multi-tenant    - Multi-tenant configuration with rate limiting
-    edge            - Edge/remote deployment with limited resources
-    testing         - Testing/CI deployment with relaxed security
-
-Examples:
-    # Install development deployment
-    $0 -t development
-
-    # Install production deployment with custom namespace
-    $0 -t production -n rag-prod -r rag-api-prod
-
-    # Install with custom values file
-    $0 -v custom-values.yaml
-
-    # Dry run to see what would be installed
-    $0 -t production -d
-
-EOF
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -n, --namespace NAMESPACE    Target namespace (default: rag-openshift-ai)"
+    echo "  -r, --release RELEASE        Release name (default: rag-api)"
+    echo "  -f, --values-file FILE       Values file (default: helm/values.yaml)"
+    echo "  -d, --dry-run                Validate without deploying"
+    echo "  --no-wait                    Don't wait for deployment to be ready"
+    echo "  --port-forward               Setup port-forward after deployment"
+    echo "  --tail-logs                  Tail logs after deployment"
+    echo "  --no-rollback                Don't rollback on failure"
+    echo "  -h, --help                   Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                                    # Deploy with default settings"
+    echo "  $0 -n my-namespace -r my-release      # Custom namespace and release"
+    echo "  $0 --dry-run                          # Validate deployment"
+    echo "  $0 --port-forward --tail-logs         # Deploy with dev features"
 }
 
 # Function to check prerequisites
@@ -107,26 +91,12 @@ check_prerequisites() {
     fi
     
     # Check if Helm chart exists
-    if [ ! -d "$HELM_CHART_PATH" ]; then
-        print_error "Helm chart not found at: $HELM_CHART_PATH"
+    if [ ! -d "helm" ]; then
+        print_error "Helm chart not found at: helm"
         exit 1
     fi
     
     print_success "Prerequisites check completed"
-}
-
-# Function to validate deployment type
-validate_deployment_type() {
-    case $DEPLOYMENT_TYPE in
-        development|production|ha|multi-tenant|edge|testing)
-            print_info "Deployment type: $DEPLOYMENT_TYPE"
-            ;;
-        *)
-            print_error "Invalid deployment type: $DEPLOYMENT_TYPE"
-            show_usage
-            exit 1
-            ;;
-    esac
 }
 
 # Function to create namespace
@@ -163,7 +133,7 @@ get_values_file() {
         echo "$VALUES_FILE"
     else
         # Use examples file with deployment type
-        EXAMPLES_FILE="$HELM_CHART_PATH/values-examples.yaml"
+        EXAMPLES_FILE="helm/values-examples.yaml"
         if [ ! -f "$EXAMPLES_FILE" ]; then
             print_error "Values examples file not found: $EXAMPLES_FILE"
             exit 1
@@ -174,7 +144,7 @@ get_values_file() {
 
 # Function to build Helm command
 build_helm_command() {
-    local cmd="helm install $RELEASE_NAME $HELM_CHART_PATH"
+    local cmd="helm install $RELEASE_NAME helm"
     
     # Add namespace
     cmd="$cmd --namespace $NAMESPACE"
@@ -184,7 +154,7 @@ build_helm_command() {
     if [ -n "$VALUES_FILE" ]; then
         cmd="$cmd --values $values_file"
     else
-        cmd="$cmd --values $values_file --set-string config=$DEPLOYMENT_TYPE"
+        cmd="$cmd --values $values_file --set-string config=development"
     fi
     
     # Add dry run if requested
@@ -206,11 +176,10 @@ install_helm_chart() {
         print_info "Dry run mode - no changes will be made"
         eval "$helm_cmd"
     else
-        if [ "$FORCE" = false ]; then
+        if [ "$WAIT_FOR_READY" = true ]; then
             echo
             print_warning "This will install the RAG API in namespace: $NAMESPACE"
             print_warning "Release name: $RELEASE_NAME"
-            print_warning "Deployment type: $DEPLOYMENT_TYPE"
             echo
             read -p "Do you want to continue? (y/N): " -n 1 -r
             echo
@@ -288,7 +257,7 @@ show_post_installation_info() {
     echo "  oc get route $RELEASE_NAME -n $NAMESPACE"
     echo
     echo "  # Upgrade deployment"
-    echo "  helm upgrade $RELEASE_NAME $HELM_CHART_PATH -n $NAMESPACE"
+    echo "  helm upgrade $RELEASE_NAME helm -n $NAMESPACE"
     echo
     echo "  # Uninstall deployment"
     echo "  helm uninstall $RELEASE_NAME -n $NAMESPACE"
@@ -310,24 +279,28 @@ while [[ $# -gt 0 ]]; do
             RELEASE_NAME="$2"
             shift 2
             ;;
-        -t|--type)
-            DEPLOYMENT_TYPE="$2"
-            shift 2
-            ;;
-        -v|--values)
+        -f|--values-file)
             VALUES_FILE="$2"
-            shift 2
-            ;;
-        -c|--chart)
-            HELM_CHART_PATH="$2"
             shift 2
             ;;
         -d|--dry-run)
             DRY_RUN=true
             shift
             ;;
-        -f|--force)
-            FORCE=true
+        --no-wait)
+            WAIT_FOR_READY=false
+            shift
+            ;;
+        --port-forward)
+            PORT_FORWARD=true
+            shift
+            ;;
+        --tail-logs)
+            TAIL_LOGS=true
+            shift
+            ;;
+        --no-rollback)
+            ROLLBACK_ON_FAILURE=false
             shift
             ;;
         -h|--help)
@@ -346,9 +319,6 @@ done
 main() {
     print_info "RAG OpenShift AI API - Helm Installation Script"
     echo
-    
-    # Validate inputs
-    validate_deployment_type
     
     # Check prerequisites
     check_prerequisites
