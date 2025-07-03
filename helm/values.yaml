@@ -1,0 +1,511 @@
+# =============================================================================
+# RAG OpenShift AI API - Helm Values
+# =============================================================================
+
+# Image Configuration
+image:
+  repository: rag-openshift-ai-api
+  tag: "latest"
+  pullPolicy: "Always"
+  pullSecrets: []
+  # Example for private registry:
+  # repository: quay.io/myorg/rag-openshift-ai-api
+  # pullSecrets:
+  #   - name: quay-registry-secret
+
+# Deployment Configuration
+replicaCount: 2
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+revisionHistoryLimit: 10
+
+# Pod Configuration
+podAnnotations: {}
+podLabels: {}
+  # Example:
+  # podLabels:
+  #   app.kubernetes.io/component: api
+  #   app.kubernetes.io/part-of: rag-system
+
+# Service Configuration
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+  annotations: {}
+    # Example for monitoring:
+    # annotations:
+    #   prometheus.io/scrape: "true"
+    #   prometheus.io/port: "8000"
+    #   prometheus.io/path: "/api/v1/metrics"
+
+# Route Configuration (OpenShift)
+route:
+  enabled: true
+  host: ""  # Auto-generated if empty
+  path: "/"
+  tls:
+    enabled: true
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  annotations: {}
+    # Example:
+    # annotations:
+    #   haproxy.router.openshift.io/timeout: 300s
+    #   haproxy.router.openshift.io/rate-limit-connections: "true"
+
+# Resource Management
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  # Note: RAG workloads can be memory-intensive due to embeddings and models
+
+# Configuration
+config:
+  # Elasticsearch Configuration
+  elasticsearch:
+    url: "https://elasticsearch:9200"
+    index: "rag-documents"
+    username: ""
+    password: ""
+    sslVerify: true
+    timeout: 30
+    maxRetries: 3
+    # Connection pool settings
+    maxConnections: 20
+    retryOnTimeout: true
+  
+  # vLLM Configuration
+  vllm:
+    endpoint: "http://vllm-service:8000"
+    defaultModel: "meta-llama/Llama-2-7b-chat-hf"
+    maxTokens: 2048
+    temperature: 0.7
+    topP: 0.9
+    timeout: 60
+  
+  # API Configuration
+  api:
+    logLevel: "INFO"
+    debug: false
+    corsOrigins: ["*"]
+    maxRequestSize: "10MB"
+    requestTimeout: 300
+    # Rate limiting
+    rateLimit:
+      enabled: true
+      requestsPerMinute: 60
+      burstSize: 10
+  
+  # RAG Pipeline Configuration
+  rag:
+    # Retrieval settings
+    retrieval:
+      topK: 5
+      similarityThreshold: 0.7
+      maxTokens: 4000
+      searchType: "hybrid"  # vector, keyword, hybrid
+    
+    # Generation settings
+    generation:
+      maxTokens: 2048
+      temperature: 0.7
+      topP: 0.9
+      topK: 50
+      repetitionPenalty: 1.1
+    
+    # Caching
+    cache:
+      enabled: true
+      ttl: 3600  # 1 hour
+      maxSize: 1000
+
+# Health Checks
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+  successThreshold: 1
+
+# Security Context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+# Service Account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # Example for OpenShift:
+  # annotations:
+  #   serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"rag-openshift-ai-api"}}'
+
+# Network Policy
+networkPolicy:
+  enabled: false
+  ingressRules:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+  egressRules:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: elasticsearch
+      ports:
+        - protocol: TCP
+          port: 9200
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: vllm
+      ports:
+        - protocol: TCP
+          port: 8000
+    - ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: "30s"
+    path: "/api/v1/metrics"
+    port: "http"
+    scrapeTimeout: "10s"
+    honorLabels: true
+    # Example for additional labels:
+    # additionalLabels:
+    #   release: prometheus
+  podMonitor:
+    enabled: false
+  grafanaDashboard:
+    enabled: false
+    # dashboard: |
+    #   {
+    #     "dashboard": {
+    #       "title": "RAG API Dashboard"
+    #     }
+    #   }
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "json"
+  output: "stdout"
+  # Fluentd configuration
+  fluentd:
+    enabled: false
+    # config: |
+    #   <source>
+    #     @type tail
+    #     path /var/log/containers/*.log
+    #     pos_file /var/log/fluentd-containers.log.pos
+    #     tag kubernetes.*
+    #     read_from_head true
+    #     <parse>
+    #       @type json
+    #       time_format %Y-%m-%dT%H:%M:%S.%NZ
+    #     </parse>
+    #   </source>
+
+# Environment Variables
+env:
+  # API Configuration
+  - name: API_LOG_LEVEL
+    value: "{{ .Values.config.api.logLevel }}"
+  - name: API_DEBUG
+    value: "{{ .Values.config.api.debug }}"
+  - name: API_CORS_ORIGINS
+    value: "{{ .Values.config.api.corsOrigins | join \",\" }}"
+  - name: API_MAX_REQUEST_SIZE
+    value: "{{ .Values.config.api.maxRequestSize }}"
+  - name: API_REQUEST_TIMEOUT
+    value: "{{ .Values.config.api.requestTimeout }}"
+  
+  # Elasticsearch Configuration
+  - name: ELASTICSEARCH_URL
+    value: "{{ .Values.config.elasticsearch.url }}"
+  - name: ELASTICSEARCH_INDEX
+    value: "{{ .Values.config.elasticsearch.index }}"
+  - name: ELASTICSEARCH_USERNAME
+    value: "{{ .Values.config.elasticsearch.username }}"
+  - name: ELASTICSEARCH_PASSWORD
+    value: "{{ .Values.config.elasticsearch.password }}"
+  - name: ELASTICSEARCH_SSL_VERIFY
+    value: "{{ .Values.config.elasticsearch.sslVerify }}"
+  - name: ELASTICSEARCH_TIMEOUT
+    value: "{{ .Values.config.elasticsearch.timeout }}"
+  - name: ELASTICSEARCH_MAX_RETRIES
+    value: "{{ .Values.config.elasticsearch.maxRetries }}"
+  
+  # vLLM Configuration
+  - name: VLLM_ENDPOINT
+    value: "{{ .Values.config.vllm.endpoint }}"
+  - name: VLLM_DEFAULT_MODEL
+    value: "{{ .Values.config.vllm.defaultModel }}"
+  - name: VLLM_MAX_TOKENS
+    value: "{{ .Values.config.vllm.maxTokens }}"
+  - name: VLLM_TEMPERATURE
+    value: "{{ .Values.config.vllm.temperature }}"
+  - name: VLLM_TOP_P
+    value: "{{ .Values.config.vllm.topP }}"
+  - name: VLLM_TIMEOUT
+    value: "{{ .Values.config.vllm.timeout }}"
+  
+  # RAG Configuration
+  - name: RAG_TOP_K
+    value: "{{ .Values.config.rag.retrieval.topK }}"
+  - name: RAG_SIMILARITY_THRESHOLD
+    value: "{{ .Values.config.rag.retrieval.similarityThreshold }}"
+  - name: RAG_MAX_TOKENS
+    value: "{{ .Values.config.rag.retrieval.maxTokens }}"
+  - name: RAG_SEARCH_TYPE
+    value: "{{ .Values.config.rag.retrieval.searchType }}"
+  - name: RAG_GENERATION_MAX_TOKENS
+    value: "{{ .Values.config.rag.generation.maxTokens }}"
+  - name: RAG_GENERATION_TEMPERATURE
+    value: "{{ .Values.config.rag.generation.temperature }}"
+  - name: RAG_GENERATION_TOP_P
+    value: "{{ .Values.config.rag.generation.topP }}"
+  - name: RAG_GENERATION_TOP_K
+    value: "{{ .Values.config.rag.generation.topK }}"
+  - name: RAG_GENERATION_REPETITION_PENALTY
+    value: "{{ .Values.config.rag.generation.repetitionPenalty }}"
+  - name: RAG_CACHE_ENABLED
+    value: "{{ .Values.config.rag.cache.enabled }}"
+  - name: RAG_CACHE_TTL
+    value: "{{ .Values.config.rag.cache.ttl }}"
+  - name: RAG_CACHE_MAX_SIZE
+    value: "{{ .Values.config.rag.cache.maxSize }}"
+
+# Secrets (for sensitive data)
+secrets:
+  elasticsearch:
+    enabled: false
+    # secretName: elasticsearch-credentials
+    # usernameKey: username
+    # passwordKey: password
+  vllm:
+    enabled: false
+    # secretName: vllm-credentials
+    # apiKeyKey: api-key
+
+# ConfigMaps (for non-sensitive configuration)
+configMaps:
+  appConfig:
+    enabled: true
+    # Additional configuration files can be mounted here
+
+# Volumes and Volume Mounts
+volumes: []
+volumeMounts: []
+# Example for persistent storage:
+# volumes:
+#   - name: data-volume
+#     persistentVolumeClaim:
+#       claimName: rag-data-pvc
+# volumeMounts:
+#   - name: data-volume
+#     mountPath: /app/data
+
+# Node Selector
+nodeSelector: {}
+# Example:
+# nodeSelector:
+#   node-role.kubernetes.io/worker: "true"
+
+# Tolerations
+tolerations: []
+# Example:
+# tolerations:
+#   - key: "node-role.kubernetes.io/master"
+#     operator: "Exists"
+#     effect: "NoSchedule"
+
+# Affinity
+affinity: {}
+# Example for pod anti-affinity:
+# affinity:
+#   podAntiAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#     - weight: 100
+#       podAffinityTerm:
+#         labelSelector:
+#           matchExpressions:
+#           - key: app.kubernetes.io/name
+#             operator: In
+#             values:
+#             - rag-openshift-ai-api
+#         topologyKey: kubernetes.io/hostname
+
+# Annotations for the deployment
+deploymentAnnotations: {}
+# Example:
+# deploymentAnnotations:
+#   fluxcd.io/automated: "true"
+#   fluxcd.io/tag.rag-api: glob:main-*
+
+# Labels for the deployment
+deploymentLabels: {}
+# Example:
+# deploymentLabels:
+#   app.kubernetes.io/component: api
+#   app.kubernetes.io/part-of: rag-system
+
+# Ingress (alternative to Route for Kubernetes)
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+# Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1
+  # Alternative: maxUnavailable: 1
+
+# Priority Class
+priorityClassName: ""
+# Example: "high-priority"
+
+# Termination Grace Period
+terminationGracePeriodSeconds: 30
+
+# Image Pull Secrets
+imagePullSecrets: []
+# Example:
+# imagePullSecrets:
+#   - name: registry-secret
+
+# Init Containers
+initContainers: []
+# Example:
+# initContainers:
+#   - name: init-config
+#     image: busybox:1.35
+#     command: ['sh', '-c', 'echo "Initializing..."']
+#     volumeMounts:
+#       - name: config-volume
+#         mountPath: /config
+
+# Sidecar Containers
+sidecarContainers: []
+# Example:
+# sidecarContainers:
+#   - name: sidecar
+#     image: nginx:alpine
+#     ports:
+#       - containerPort: 80
+
+# Lifecycle Hooks
+lifecycle:
+  preStop:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "sleep 10"
+  postStart:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "echo 'Container started'"
+
+# Pod Template Annotations
+podTemplateAnnotations: {}
+# Example:
+# podTemplateAnnotations:
+#   checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+
+# Pod Template Labels
+podTemplateLabels: {}
+# Example:
+# podTemplateLabels:
+#   app.kubernetes.io/component: api 

@@ -1,0 +1,261 @@
+{{- if .Values.configMaps.appConfig.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rag-openshift-ai-api.fullname" . }}-config
+  labels:
+    {{- include "rag-openshift-ai-api.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.configMaps.appConfig.annotations }}
+    {{- toYaml .Values.configMaps.appConfig.annotations | nindent 4 }}
+    {{- end }}
+data:
+  # =============================================================================
+  # API Configuration
+  # =============================================================================
+  api-config.json: |
+    {
+      "log_level": "{{ .Values.config.api.logLevel }}",
+      "debug": {{ .Values.config.api.debug }},
+      "cors_origins": {{ .Values.config.api.corsOrigins | toJson }},
+      "max_request_size": "{{ .Values.config.api.maxRequestSize }}",
+      "request_timeout": {{ .Values.config.api.requestTimeout }},
+      "rate_limit": {
+        "enabled": {{ .Values.config.api.rateLimit.enabled }},
+        "requests_per_minute": {{ .Values.config.api.rateLimit.requestsPerMinute }},
+        "burst_size": {{ .Values.config.api.rateLimit.burstSize }}
+      },
+      "host": "0.0.0.0",
+      "port": {{ .Values.service.targetPort }},
+      "reload": false
+    }
+
+  # =============================================================================
+  # ElasticSearch Configuration
+  # =============================================================================
+  elasticsearch-config.json: |
+    {
+      "url": "{{ .Values.config.elasticsearch.url }}",
+      "index": "{{ .Values.config.elasticsearch.index }}",
+      "ssl_verify": {{ .Values.config.elasticsearch.sslVerify }},
+      "timeout": {{ .Values.config.elasticsearch.timeout }},
+      "max_retries": {{ .Values.config.elasticsearch.maxRetries }},
+      "max_connections": {{ .Values.config.elasticsearch.maxConnections }},
+      "retry_on_timeout": {{ .Values.config.elasticsearch.retryOnTimeout }},
+      "connection_pool": {
+        "maxsize": {{ .Values.config.elasticsearch.maxConnections }},
+        "retry_on_timeout": {{ .Values.config.elasticsearch.retryOnTimeout }}
+      }
+    }
+
+  # =============================================================================
+  # vLLM Configuration
+  # =============================================================================
+  vllm-config.json: |
+    {
+      "endpoint": "{{ .Values.config.vllm.endpoint }}",
+      "default_model": "{{ .Values.config.vllm.defaultModel }}",
+      "max_tokens": {{ .Values.config.vllm.maxTokens }},
+      "temperature": {{ .Values.config.vllm.temperature }},
+      "top_p": {{ .Values.config.vllm.topP }},
+      "timeout": {{ .Values.config.vllm.timeout }},
+      "models": [
+        "{{ .Values.config.vllm.defaultModel }}"
+        {{- if .Values.config.vllm.additionalModels }},
+        {{- range .Values.config.vllm.additionalModels }}
+        "{{ . }}"
+        {{- if not (last . $.Values.config.vllm.additionalModels) }},{{- end }}
+        {{- end }}
+        {{- end }}
+      ]
+    }
+
+  # =============================================================================
+  # RAG Pipeline Configuration
+  # =============================================================================
+  rag-config.json: |
+    {
+      "retrieval": {
+        "top_k": {{ .Values.config.rag.retrieval.topK }},
+        "similarity_threshold": {{ .Values.config.rag.retrieval.similarityThreshold }},
+        "max_tokens": {{ .Values.config.rag.retrieval.maxTokens }},
+        "search_type": "{{ .Values.config.rag.retrieval.searchType }}",
+        "filters": {{ .Values.config.rag.retrieval.filters | default dict | toJson }},
+        "rerank": {{ .Values.config.rag.retrieval.rerank | default false }},
+        "rerank_model": "{{ .Values.config.rag.retrieval.rerankModel | default "" }}"
+      },
+      "generation": {
+        "max_tokens": {{ .Values.config.rag.generation.maxTokens }},
+        "temperature": {{ .Values.config.rag.generation.temperature }},
+        "top_p": {{ .Values.config.rag.generation.topP }},
+        "top_k": {{ .Values.config.rag.generation.topK }},
+        "repetition_penalty": {{ .Values.config.rag.generation.repetitionPenalty }},
+        "stop_sequences": {{ .Values.config.rag.generation.stopSequences | default list | toJson }},
+        "stream": {{ .Values.config.rag.generation.stream | default false }}
+      },
+      "cache": {
+        "enabled": {{ .Values.config.rag.cache.enabled }},
+        "ttl": {{ .Values.config.rag.cache.ttl }},
+        "max_size": {{ .Values.config.rag.cache.maxSize }},
+        "backend": "{{ .Values.config.rag.cache.backend | default "memory" }}"
+      },
+      "prompts": {
+        "system_template": {{ .Values.config.rag.prompts.systemTemplate | default "You are a helpful AI assistant. Use the following context to answer the user's question." | quote }},
+        "user_template": {{ .Values.config.rag.prompts.userTemplate | default "Context: {context}\n\nQuestion: {question}" | quote }},
+        "context_separator": "{{ .Values.config.rag.prompts.contextSeparator | default "\n\n" }}"
+      }
+    }
+
+  # =============================================================================
+  # Logging Configuration
+  # =============================================================================
+  logging-config.json: |
+    {
+      "level": "{{ .Values.logging.level }}",
+      "format": "{{ .Values.logging.format }}",
+      "output": "{{ .Values.logging.output }}",
+      "structured": true,
+      "correlation_id": true,
+      "sanitize": true,
+      "fields": {
+        "service": "{{ include "rag-openshift-ai-api.fullname" . }}",
+        "version": "{{ .Chart.AppVersion }}",
+        "environment": "{{ .Values.environment | default "production" }}"
+      }
+    }
+
+  # =============================================================================
+  # Monitoring Configuration
+  # =============================================================================
+  monitoring-config.json: |
+    {
+      "enabled": {{ .Values.monitoring.enabled }},
+      "metrics": {
+        "enabled": {{ .Values.monitoring.enabled }},
+        "path": "{{ .Values.monitoring.serviceMonitor.path | default "/api/v1/metrics" }}",
+        "port": "{{ .Values.service.targetPort }}",
+        "interval": "{{ .Values.monitoring.serviceMonitor.interval | default "30s" }}"
+      },
+      "health": {
+        "enabled": true,
+        "path": "/health",
+        "timeout": "5s"
+      },
+      "tracing": {
+        "enabled": {{ .Values.monitoring.tracing.enabled | default false }},
+        "sampler": "{{ .Values.monitoring.tracing.sampler | default "probabilistic" }}",
+        "probability": {{ .Values.monitoring.tracing.probability | default 0.1 }}
+      }
+    }
+
+  # =============================================================================
+  # Environment Variables (for reference)
+  # =============================================================================
+  environment.txt: |
+    # API Configuration
+    API_LOG_LEVEL={{ .Values.config.api.logLevel }}
+    API_DEBUG={{ .Values.config.api.debug }}
+    API_CORS_ORIGINS={{ .Values.config.api.corsOrigins | join "," }}
+    API_MAX_REQUEST_SIZE={{ .Values.config.api.maxRequestSize }}
+    API_REQUEST_TIMEOUT={{ .Values.config.api.requestTimeout }}
+    
+    # ElasticSearch Configuration
+    ELASTICSEARCH_URL={{ .Values.config.elasticsearch.url }}
+    ELASTICSEARCH_INDEX={{ .Values.config.elasticsearch.index }}
+    ELASTICSEARCH_SSL_VERIFY={{ .Values.config.elasticsearch.sslVerify }}
+    ELASTICSEARCH_TIMEOUT={{ .Values.config.elasticsearch.timeout }}
+    ELASTICSEARCH_MAX_RETRIES={{ .Values.config.elasticsearch.maxRetries }}
+    
+    # vLLM Configuration
+    VLLM_ENDPOINT={{ .Values.config.vllm.endpoint }}
+    VLLM_DEFAULT_MODEL={{ .Values.config.vllm.defaultModel }}
+    VLLM_MAX_TOKENS={{ .Values.config.vllm.maxTokens }}
+    VLLM_TEMPERATURE={{ .Values.config.vllm.temperature }}
+    VLLM_TOP_P={{ .Values.config.vllm.topP }}
+    VLLM_TIMEOUT={{ .Values.config.vllm.timeout }}
+    
+    # RAG Configuration
+    RAG_TOP_K={{ .Values.config.rag.retrieval.topK }}
+    RAG_SIMILARITY_THRESHOLD={{ .Values.config.rag.retrieval.similarityThreshold }}
+    RAG_MAX_TOKENS={{ .Values.config.rag.retrieval.maxTokens }}
+    RAG_SEARCH_TYPE={{ .Values.config.rag.retrieval.searchType }}
+    RAG_GENERATION_MAX_TOKENS={{ .Values.config.rag.generation.maxTokens }}
+    RAG_GENERATION_TEMPERATURE={{ .Values.config.rag.generation.temperature }}
+    RAG_GENERATION_TOP_P={{ .Values.config.rag.generation.topP }}
+    RAG_GENERATION_TOP_K={{ .Values.config.rag.generation.topK }}
+    RAG_GENERATION_REPETITION_PENALTY={{ .Values.config.rag.generation.repetitionPenalty }}
+    RAG_CACHE_ENABLED={{ .Values.config.rag.cache.enabled }}
+    RAG_CACHE_TTL={{ .Values.config.rag.cache.ttl }}
+    RAG_CACHE_MAX_SIZE={{ .Values.config.rag.cache.maxSize }}
+    
+    # Logging Configuration
+    LOG_LEVEL={{ .Values.logging.level }}
+    LOG_FORMAT={{ .Values.logging.format }}
+    LOG_OUTPUT={{ .Values.logging.output }}
+    
+    # Monitoring Configuration
+    METRICS_ENABLED={{ .Values.monitoring.enabled }}
+    
+    # Pod Information
+    POD_NAME=${POD_NAME}
+    POD_NAMESPACE=${POD_NAMESPACE}
+    POD_IP=${POD_IP}
+    SERVICE_NAME={{ include "rag-openshift-ai-api.fullname" . }}
+
+  # =============================================================================
+  # Feature Flags
+  # =============================================================================
+  features.json: |
+    {
+      "experimental": {
+        "streaming": {{ .Values.features.experimental.streaming | default false }},
+        "async_processing": {{ .Values.features.experimental.asyncProcessing | default false }},
+        "batch_processing": {{ .Values.features.experimental.batchProcessing | default false }}
+      },
+      "security": {
+        "rate_limiting": {{ .Values.config.api.rateLimit.enabled }},
+        "cors": true,
+        "input_validation": true,
+        "output_sanitization": true
+      },
+      "performance": {
+        "caching": {{ .Values.config.rag.cache.enabled }},
+        "connection_pooling": true,
+        "compression": true,
+        "gzip": true
+      },
+      "observability": {
+        "metrics": {{ .Values.monitoring.enabled }},
+        "logging": true,
+        "tracing": {{ .Values.monitoring.tracing.enabled | default false }},
+        "health_checks": true
+      }
+    }
+
+  # =============================================================================
+  # Application Metadata
+  # =============================================================================
+  app-info.json: |
+    {
+      "name": "{{ include "rag-openshift-ai-api.fullname" . }}",
+      "version": "{{ .Chart.AppVersion }}",
+      "description": "RAG OpenShift AI API - Retrieval-Augmented Generation API",
+      "repository": "{{ .Values.appInfo.repository | default "https://github.com/your-org/rag-openshift-ai-api" }}",
+      "maintainer": "{{ .Values.appInfo.maintainer | default "your-team@company.com" }}",
+      "license": "{{ .Values.appInfo.license | default "MIT" }}",
+      "deployment": {
+        "namespace": "{{ .Release.Namespace }}",
+        "release": "{{ .Release.Name }}",
+        "revision": "{{ .Release.Revision }}",
+        "chart": "{{ .Chart.Name }}-{{ .Chart.Version }}",
+        "values_hash": "{{ .Values | toYaml | sha256sum }}"
+      },
+      "capabilities": {
+        "rag": true,
+        "vector_search": true,
+        "text_generation": true,
+        "embeddings": true,
+        "document_processing": true
+      }
+    }
+{{- end }} 

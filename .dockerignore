@@ -1,0 +1,176 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+docs/
+*.md
+
+# Development files
+.env
+.env.*
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Helm charts (will be deployed separately)
+helm/
+
+# Scripts (not needed in container)
+scripts/
+
+# Tests (not needed in production)
+tests/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Kubernetes/OpenShift
+*.yaml
+*.yml
+kustomization.yaml
+
+# Local development
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Documentation
+docs/
+*.md
+
+# Tests
+tests/
+
+# Development
+scripts/
+.github/
+
+# Helm charts (keep for Containerfile)
+# helm/
+
+# Logs
+logs/
+*.log
+
+# Setup inicial
+setup_logging("INFO")
+
+# Logger para componente
+logger = get_logger("rag.pipeline")
+
+# Decorator para requests
+@log_request("query_processing")
+async def process_query(request):
+    # código aquí
+    pass
+
+# Context manager para performance
+with log_performance("embedding_generation"):
+    # código aquí
+    pass 

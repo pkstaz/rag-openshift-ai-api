@@ -1,0 +1,386 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: rag-openshift-ai-api
+  annotations:
+    description: "RAG OpenShift AI API - Retrieval-Augmented Generation API"
+    tags: "rag,ai,api,openshift"
+    iconClass: "icon-python"
+    openshift.io/display-name: "RAG OpenShift AI API"
+    openshift.io/documentation-url: "https://github.com/your-repo/rag-openshift-ai-api"
+    openshift.io/support-url: "https://github.com/your-repo/rag-openshift-ai-api/issues"
+
+parameters:
+- name: APPLICATION_NAME
+  displayName: "Application Name"
+  description: "Name of the RAG API application"
+  value: "rag-api"
+  required: true
+
+- name: NAMESPACE
+  displayName: "Namespace"
+  description: "Target namespace for deployment"
+  value: "rag-project"
+  required: true
+
+- name: IMAGE_TAG
+  displayName: "Image Tag"
+  description: "Docker image tag to deploy"
+  value: "latest"
+  required: true
+
+- name: REPLICAS
+  displayName: "Number of Replicas"
+  description: "Number of replicas to run"
+  value: "2"
+  required: true
+
+- name: CPU_REQUEST
+  displayName: "CPU Request"
+  description: "CPU request for each pod"
+  value: "500m"
+  required: true
+
+- name: CPU_LIMIT
+  displayName: "CPU Limit"
+  description: "CPU limit for each pod"
+  value: "2000m"
+  required: true
+
+- name: MEMORY_REQUEST
+  displayName: "Memory Request"
+  description: "Memory request for each pod"
+  value: "1Gi"
+  required: true
+
+- name: MEMORY_LIMIT
+  displayName: "Memory Limit"
+  description: "Memory limit for each pod"
+  value: "4Gi"
+  required: true
+
+- name: ELASTICSEARCH_URL
+  displayName: "ElasticSearch URL"
+  description: "ElasticSearch server URL"
+  value: "http://elasticsearch:9200"
+  required: true
+
+- name: VLLM_URL
+  displayName: "vLLM URL"
+  description: "vLLM server URL"
+  value: "http://vllm-server:8001"
+  required: true
+
+- name: LOG_LEVEL
+  displayName: "Log Level"
+  description: "Application log level"
+  value: "INFO"
+  required: true
+
+objects:
+# =============================================================================
+# ImageStream
+# =============================================================================
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+    labels:
+      app: ${APPLICATION_NAME}
+      component: api
+  spec:
+    lookupPolicy:
+      local: true
+
+# =============================================================================
+# BuildConfig
+# =============================================================================
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+    labels:
+      app: ${APPLICATION_NAME}
+      component: api
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${APPLICATION_NAME}:${IMAGE_TAG}
+    source:
+      git:
+        uri: https://github.com/your-repo/rag-openshift-ai-api.git
+        ref: main
+      contextDir: .
+    strategy:
+      type: Docker
+      dockerStrategy:
+        dockerfilePath: Containerfile
+        env:
+        - name: BUILDKIT_INLINE_CACHE
+          value: "1"
+    triggers:
+    - type: ConfigChange
+    - type: ImageChange
+    resources:
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+
+# =============================================================================
+# DeploymentConfig
+# =============================================================================
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+    labels:
+      app: ${APPLICATION_NAME}
+      component: api
+  spec:
+    replicas: ${REPLICAS}
+    selector:
+      app: ${APPLICATION_NAME}
+      component: api
+    template:
+      metadata:
+        labels:
+          app: ${APPLICATION_NAME}
+          component: api
+      spec:
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          fsGroup: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        containers:
+        - name: ${APPLICATION_NAME}
+          image: ${APPLICATION_NAME}:${IMAGE_TAG}
+          ports:
+          - containerPort: 8000
+            name: http
+            protocol: TCP
+          env:
+          - name: API_HOST
+            value: "0.0.0.0"
+          - name: API_PORT
+            value: "8000"
+          - name: API_VERSION
+            value: "0.1.0"
+          - name: ELASTICSEARCH_URL
+            value: "${ELASTICSEARCH_URL}"
+          - name: VLLM_URL
+            value: "${VLLM_URL}"
+          - name: LOG_LEVEL
+            value: "${LOG_LEVEL}"
+          - name: ENVIRONMENT
+            value: "production"
+          resources:
+            limits:
+              cpu: ${CPU_LIMIT}
+              memory: ${MEMORY_LIMIT}
+            requests:
+              cpu: ${CPU_REQUEST}
+              memory: ${MEMORY_REQUEST}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+        terminationGracePeriodSeconds: 60
+
+# =============================================================================
+# Service
+# =============================================================================
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+    labels:
+      app: ${APPLICATION_NAME}
+      component: api
+  spec:
+    ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+    selector:
+      app: ${APPLICATION_NAME}
+      component: api
+    type: ClusterIP
+
+# =============================================================================
+# Route
+# =============================================================================
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+    labels:
+      app: ${APPLICATION_NAME}
+      component: api
+    annotations:
+      openshift.io/host.generated: "true"
+  spec:
+    host: ${APPLICATION_NAME}-${NAMESPACE}.apps.${CLUSTER_DOMAIN}
+    port:
+      targetPort: http
+    to:
+      kind: Service
+      name: ${APPLICATION_NAME}
+      weight: 100
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
+# =============================================================================
+# HorizontalPodAutoscaler
+# =============================================================================
+- apiVersion: autoscaling/v2
+  kind: HorizontalPodAutoscaler
+  metadata:
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+    labels:
+      app: ${APPLICATION_NAME}
+      component: api
+  spec:
+    scaleTargetRef:
+      apiVersion: apps.openshift.io/v1
+      kind: DeploymentConfig
+      name: ${APPLICATION_NAME}
+    minReplicas: 2
+    maxReplicas: 10
+    metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+# =============================================================================
+# ConfigMap for Application Settings
+# =============================================================================
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: ${APPLICATION_NAME}-config
+    namespace: ${NAMESPACE}
+    labels:
+      app: ${APPLICATION_NAME}
+      component: config
+  data:
+    api.yaml: |
+      host: "0.0.0.0"
+      port: 8000
+      version: "0.1.0"
+      docs_enabled: "true"
+      cors_enabled: "true"
+      cors_origins: "['*']"
+    
+    logging.yaml: |
+      level: "${LOG_LEVEL}"
+      format: "json"
+      output: "stdout"
+    
+    metrics.yaml: |
+      enabled: "true"
+      host: "0.0.0.0"
+      port: 9090
+
+# =============================================================================
+# ServiceAccount
+# =============================================================================
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+    labels:
+      app: ${APPLICATION_NAME}
+      component: api
+
+# =============================================================================
+# NetworkPolicy
+# =============================================================================
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: ${APPLICATION_NAME}-network-policy
+    namespace: ${NAMESPACE}
+    labels:
+      app: ${APPLICATION_NAME}
+      component: network
+  spec:
+    podSelector:
+      matchLabels:
+        app: ${APPLICATION_NAME}
+    policyTypes:
+      - Ingress
+      - Egress
+    ingress:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                name: frontend
+        ports:
+          - protocol: TCP
+            port: 8000
+    egress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                name: elasticsearch
+        ports:
+          - protocol: TCP
+            port: 9200
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                name: vllm
+        ports:
+          - protocol: TCP
+            port: 8001
+      - ports:
+          - protocol: TCP
+            port: 53
+          - protocol: UDP
+            port: 53 

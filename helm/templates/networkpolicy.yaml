@@ -1,0 +1,174 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "rag-openshift-ai-api.fullname" . }}
+  labels:
+    {{- include "rag-openshift-ai-api.labels" . | nindent 4 }}
+  {{- with .Values.networkPolicy.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "rag-openshift-ai-api.selectorLabels" . | nindent 6 }}
+  
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  # Ingress Rules - Incoming Traffic
+  ingress:
+    {{- if .Values.networkPolicy.ingressRules }}
+    {{- toYaml .Values.networkPolicy.ingressRules | nindent 4 }}
+    {{- else }}
+    # Allow traffic from OpenShift Router
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: openshift-ingress
+        - namespaceSelector:
+            matchLabels:
+              name: openshift-route-controller-manager
+        - podSelector:
+            matchLabels:
+              app: router
+        - podSelector:
+            matchLabels:
+              app: haproxy-router
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+    
+    # Allow traffic from Prometheus/Monitoring
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: openshift-monitoring
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+        - podSelector:
+            matchLabels:
+              app: prometheus
+        - podSelector:
+            matchLabels:
+              app: prometheus-operator
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+    
+    # Allow traffic from same namespace (inter-service communication)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+    
+    # Allow traffic from specific namespaces if configured
+    {{- if .Values.networkPolicy.allowedNamespaces }}
+    - from:
+        {{- range .Values.networkPolicy.allowedNamespaces }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+    {{- end }}
+    {{- end }}
+  
+  # Egress Rules - Outgoing Traffic
+  egress:
+    {{- if .Values.networkPolicy.egressRules }}
+    {{- toYaml .Values.networkPolicy.egressRules | nindent 4 }}
+    {{- else }}
+    # Allow traffic to ElasticSearch
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: elasticsearch
+        - namespaceSelector:
+            matchLabels:
+              app: elasticsearch
+        - podSelector:
+            matchLabels:
+              app: elasticsearch
+        - podSelector:
+            matchLabels:
+              app: elasticsearch-master
+      ports:
+        - protocol: TCP
+          port: 9200  # HTTP API
+        - protocol: TCP
+          port: 9300  # Transport API
+    
+    # Allow traffic to vLLM service
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: vllm
+        - namespaceSelector:
+            matchLabels:
+              app: vllm
+        - podSelector:
+            matchLabels:
+              app: vllm
+        - podSelector:
+            matchLabels:
+              app: vllm-service
+      ports:
+        - protocol: TCP
+          port: 8000  # vLLM API
+    
+    # Allow traffic to same namespace services
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+    
+    # Allow DNS resolution
+    - ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    
+    # Allow NTP for time synchronization
+    - ports:
+        - protocol: UDP
+          port: 123
+    
+    # Allow external services if configured
+    {{- if .Values.networkPolicy.allowedExternalServices }}
+    - to:
+        {{- range .Values.networkPolicy.allowedExternalServices }}
+        - ipBlock:
+            cidr: {{ .cidr }}
+            {{- if .except }}
+            except:
+              {{- toYaml .except | nindent 14 }}
+            {{- end }}
+        {{- end }}
+      ports:
+        {{- range .Values.networkPolicy.allowedExternalPorts }}
+        - protocol: {{ .protocol | default "TCP" }}
+          port: {{ .port }}
+        {{- end }}
+    {{- end }}
+    
+    # Allow internet access for model downloads (if enabled)
+    {{- if .Values.networkPolicy.allowInternetAccess }}
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443  # HTTPS
+        - protocol: TCP
+          port: 80   # HTTP
+    {{- end }}
+    {{- end }}
+{{- end }} 

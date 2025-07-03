@@ -1,0 +1,242 @@
+{
+  "test_queries": [
+    {
+      "name": "basic_query",
+      "description": "Basic RAG query without additional parameters",
+      "request": {
+        "query": "What is OpenShift?",
+        "top_k": 3
+      },
+      "expected": {
+        "status_code": 200,
+        "has_answer": true,
+        "has_sources": true,
+        "min_answer_length": 50
+      }
+    },
+    {
+      "name": "query_with_filters",
+      "description": "Query with metadata filters",
+      "request": {
+        "query": "Kubernetes platform",
+        "top_k": 2,
+        "filters": {
+          "category": "cloud"
+        }
+      },
+      "expected": {
+        "status_code": 200,
+        "has_answer": true,
+        "has_sources": true,
+        "max_sources": 2
+      }
+    },
+    {
+      "name": "query_with_model",
+      "description": "Query with specific model parameter",
+      "request": {
+        "query": "What is Elasticsearch?",
+        "top_k": 3,
+        "model_name": "microsoft/DialoGPT-medium"
+      },
+      "expected": {
+        "status_code": 200,
+        "has_answer": true,
+        "has_sources": true
+      }
+    },
+    {
+      "name": "query_with_all_params",
+      "description": "Query with all parameters",
+      "request": {
+        "query": "Compare OpenShift and Kubernetes",
+        "top_k": 3,
+        "filters": {
+          "category": "cloud"
+        },
+        "model_name": "microsoft/DialoGPT-medium"
+      },
+      "expected": {
+        "status_code": 200,
+        "has_answer": true,
+        "has_sources": true,
+        "max_sources": 3
+      }
+    },
+    {
+      "name": "rag_technology_query",
+      "description": "Query about RAG technology",
+      "request": {
+        "query": "Explain RAG technology",
+        "top_k": 2
+      },
+      "expected": {
+        "status_code": 200,
+        "has_answer": true,
+        "has_sources": true,
+        "keywords": ["retrieval", "generation", "contextual"]
+      }
+    },
+    {
+      "name": "container_orchestration_query",
+      "description": "Query about container orchestration",
+      "request": {
+        "query": "What are the benefits of container orchestration?",
+        "top_k": 4
+      },
+      "expected": {
+        "status_code": 200,
+        "has_answer": true,
+        "has_sources": true,
+        "keywords": ["deployment", "scaling", "management"]
+      }
+    }
+  ],
+  "error_test_cases": [
+    {
+      "name": "missing_query",
+      "description": "Missing required query parameter",
+      "request": {
+        "top_k": 3
+      },
+      "expected": {
+        "status_code": 422,
+        "error_type": "validation_error"
+      }
+    },
+    {
+      "name": "empty_query",
+      "description": "Empty query string",
+      "request": {
+        "query": "",
+        "top_k": 3
+      },
+      "expected": {
+        "status_code": 422,
+        "error_type": "validation_error"
+      }
+    },
+    {
+      "name": "invalid_top_k",
+      "description": "Invalid top_k value (negative)",
+      "request": {
+        "query": "test query",
+        "top_k": -1
+      },
+      "expected": {
+        "status_code": 422,
+        "error_type": "validation_error"
+      }
+    },
+    {
+      "name": "invalid_json",
+      "description": "Invalid JSON format",
+      "request": "invalid json string",
+      "expected": {
+        "status_code": 422,
+        "error_type": "json_decode_error"
+      }
+    },
+    {
+      "name": "invalid_model",
+      "description": "Invalid model name",
+      "request": {
+        "query": "test query",
+        "model_name": "invalid-model-12345"
+      },
+      "expected": {
+        "status_code": 400,
+        "error_type": "model_error"
+      }
+    }
+  ],
+  "performance_test_queries": [
+    {
+      "query": "What is OpenShift?",
+      "top_k": 2
+    },
+    {
+      "query": "How does Kubernetes work?",
+      "top_k": 2
+    },
+    {
+      "query": "Explain RAG technology",
+      "top_k": 2
+    },
+    {
+      "query": "What is Elasticsearch used for?",
+      "top_k": 2
+    },
+    {
+      "query": "Compare OpenShift and Kubernetes",
+      "top_k": 2
+    },
+    {
+      "query": "How does OpenShift AI work?",
+      "top_k": 2
+    },
+    {
+      "query": "What are the benefits of container orchestration?",
+      "top_k": 2
+    },
+    {
+      "query": "Explain distributed search systems",
+      "top_k": 2
+    }
+  ],
+  "health_check_endpoints": [
+    {
+      "name": "health",
+      "endpoint": "/health",
+      "method": "GET",
+      "expected": {
+        "status_code": 200,
+        "response_format": "json",
+        "required_fields": ["status"]
+      }
+    },
+    {
+      "name": "ready",
+      "endpoint": "/ready",
+      "method": "GET",
+      "expected": {
+        "status_code": [200, 503],
+        "response_format": "json",
+        "required_fields": ["status"]
+      }
+    },
+    {
+      "name": "metrics",
+      "endpoint": "/api/v1/metrics",
+      "method": "GET",
+      "expected": {
+        "status_code": 200,
+        "response_format": "text",
+        "content_type": "text/plain"
+      }
+    },
+    {
+      "name": "info",
+      "endpoint": "/api/v1/info",
+      "method": "GET",
+      "expected": {
+        "status_code": 200,
+        "response_format": "json",
+        "required_fields": ["title", "version"]
+      }
+    }
+  ],
+  "performance_thresholds": {
+    "max_response_time_ms": 5000,
+    "min_success_rate_percent": 95,
+    "max_error_rate_percent": 5,
+    "min_requests_per_second": 2,
+    "max_memory_usage_mb": 512
+  },
+  "load_test_config": {
+    "concurrent_requests": [1, 5, 10, 20],
+    "test_duration_seconds": [30, 60, 120],
+    "ramp_up_seconds": 10,
+    "ramp_down_seconds": 10
+  }
+} 

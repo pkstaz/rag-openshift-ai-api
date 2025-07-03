@@ -1,0 +1,950 @@
+# =============================================================================
+# RAG OpenShift AI API - Helm Values Examples
+# =============================================================================
+#
+# This file contains comprehensive examples for configuring the RAG OpenShift AI API
+# deployment. Copy this file and customize it for your environment.
+#
+# USAGE:
+#   1. Copy this file: cp helm/values-examples.yaml my-values.yaml
+#   2. Customize the values for your environment
+#   3. Deploy: helm install rag-api ./helm -f my-values.yaml
+#
+# ENVIRONMENTS:
+#   - Development: Use minimal resources, debug enabled
+#   - Staging: Medium resources, monitoring enabled
+#   - Production: Full resources, security hardened
+#
+# DOCUMENTATION:
+#   - Deployment Guide: docs/DEPLOYMENT.md
+#   - Configuration Reference: helm/values.yaml
+#   - API Documentation: /docs endpoint when deployed
+#
+# =============================================================================
+
+# =============================================================================
+# 1. IMAGE CONFIGURATION
+# =============================================================================
+
+image:
+  # Basic local development
+  repository: rag-openshift-ai-api
+  tag: "latest"
+  pullPolicy: "Always"
+  
+  # Production with private registry
+  # repository: quay.io/myorg/rag-openshift-ai-api
+  # tag: "v1.2.3"
+  # pullPolicy: "IfNotPresent"
+  
+  # Pull secrets for private registries
+  pullSecrets: []
+  # pullSecrets:
+  #   - name: quay-registry-secret
+  #   - name: docker-registry-secret
+
+# =============================================================================
+# 2. DEPLOYMENT CONFIGURATION
+# =============================================================================
+
+# Development: Single replica for faster iteration
+replicaCount: 1
+# Production: Multiple replicas for high availability
+# replicaCount: 3
+
+# Rolling update strategy
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1        # Allow 1 extra pod during update
+    maxUnavailable: 0  # Don't allow any pods to be unavailable
+
+# Keep deployment history for rollbacks
+revisionHistoryLimit: 10
+
+# Pod annotations and labels
+podAnnotations: {}
+# podAnnotations:
+#   prometheus.io/scrape: "true"
+#   prometheus.io/port: "8000"
+#   prometheus.io/path: "/api/v1/metrics"
+
+podLabels: {}
+# podLabels:
+#   app.kubernetes.io/component: api
+#   app.kubernetes.io/part-of: rag-system
+#   environment: production
+
+# =============================================================================
+# 3. SERVICE CONFIGURATION
+# =============================================================================
+
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+  
+  # Annotations for monitoring integration
+  annotations: {}
+  # annotations:
+  #   prometheus.io/scrape: "true"
+  #   prometheus.io/port: "8000"
+  #   prometheus.io/path: "/api/v1/metrics"
+  #   prometheus.io/scheme: "http"
+
+# =============================================================================
+# 4. ROUTE CONFIGURATION (OpenShift)
+# =============================================================================
+
+route:
+  enabled: true
+  
+  # Auto-generated hostname (recommended for development)
+  host: ""
+  
+  # Custom hostname (production)
+  # host: "rag-api.mycompany.com"
+  
+  path: "/"
+  
+  # TLS configuration
+  tls:
+    enabled: true
+    termination: edge  # edge, passthrough, reencrypt
+    insecureEdgeTerminationPolicy: Redirect
+  
+  # Route annotations for OpenShift
+  annotations: {}
+  # annotations:
+  #   haproxy.router.openshift.io/timeout: 300s
+  #   haproxy.router.openshift.io/rate-limit-connections: "true"
+  #   haproxy.router.openshift.io/rate-limit-connections.concurrent-tcp: "1000"
+  #   haproxy.router.openshift.io/rate-limit-connections.rate-tcp: "2000"
+  #   haproxy.router.openshift.io/rate-limit-connections.rate-http: "2000"
+
+# =============================================================================
+# 5. RESOURCE MANAGEMENT
+# =============================================================================
+
+resources:
+  # Development: Minimal resources
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  
+  # Production: Full resources for RAG workloads
+  # requests:
+  #   cpu: 1000m
+  #   memory: 2Gi
+  # limits:
+  #   cpu: 4000m
+  #   memory: 8Gi
+  
+  # Note: RAG workloads are memory-intensive due to:
+  # - Embedding models loaded in memory
+  # - Document vectors and metadata
+  # - LLM context windows
+  # - Response generation buffers
+
+# =============================================================================
+# 6. APPLICATION CONFIGURATION
+# =============================================================================
+
+config:
+  # =================================================================
+  # 6.1 ELASTICSEARCH CONFIGURATION
+  # =================================================================
+  
+  elasticsearch:
+    # Development: Local Elasticsearch
+    url: "http://elasticsearch:9200"
+    
+    # Production: External Elasticsearch cluster
+    # url: "https://elasticsearch-cluster.mycompany.com:9200"
+    
+    # Index name for RAG documents
+    index: "rag-documents"
+    
+    # Authentication (if enabled)
+    username: ""
+    password: ""
+    
+    # SSL/TLS configuration
+    sslVerify: true
+    
+    # Connection settings
+    timeout: 30
+    maxRetries: 3
+    maxConnections: 20
+    retryOnTimeout: true
+    
+    # Example with authentication:
+    # username: "elastic"
+    # password: "changeme"
+    # sslVerify: false  # Only for development
+    
+    # Example with custom index:
+    # index: "company-documents-2024"
+  
+  # =================================================================
+  # 6.2 VLLM CONFIGURATION
+  # =================================================================
+  
+  vllm:
+    # Development: Local vLLM service
+    endpoint: "http://vllm-service:8000"
+    
+    # Production: External vLLM cluster
+    # endpoint: "https://vllm-cluster.mycompany.com:8000"
+    
+    # Model configuration
+    defaultModel: "meta-llama/Llama-2-7b-chat-hf"
+    
+    # Alternative models:
+    # defaultModel: "microsoft/DialoGPT-medium"
+    # defaultModel: "gpt2"
+    # defaultModel: "tiiuae/falcon-7b"
+    
+    # Generation parameters
+    maxTokens: 2048
+    temperature: 0.7
+    topP: 0.9
+    timeout: 60
+    
+    # Example with custom model and parameters:
+    # defaultModel: "meta-llama/Llama-2-13b-chat-hf"
+    # maxTokens: 4096
+    # temperature: 0.5
+    # topP: 0.95
+    # timeout: 120
+  
+  # =================================================================
+  # 6.3 API CONFIGURATION
+  # =================================================================
+  
+  api:
+    # Logging configuration
+    logLevel: "INFO"  # DEBUG, INFO, WARNING, ERROR
+    
+    # Development: Enable debug mode
+    debug: true
+    
+    # Production: Disable debug mode
+    # debug: false
+    
+    # CORS configuration
+    corsOrigins: ["*"]  # Allow all origins in development
+    
+    # Production: Restrict to specific domains
+    # corsOrigins: 
+    #   - "https://myapp.mycompany.com"
+    #   - "https://admin.mycompany.com"
+    
+    # Request limits
+    maxRequestSize: "10MB"
+    requestTimeout: 300
+    
+    # Rate limiting
+    rateLimit:
+      enabled: true
+      requestsPerMinute: 60
+      burstSize: 10
+      
+      # Production: Stricter rate limiting
+      # enabled: true
+      # requestsPerMinute: 30
+      # burstSize: 5
+  
+  # =================================================================
+  # 6.4 RAG PIPELINE CONFIGURATION
+  # =================================================================
+  
+  rag:
+    # Retrieval settings
+    retrieval:
+      topK: 5                    # Number of documents to retrieve
+      similarityThreshold: 0.7   # Minimum similarity score
+      maxTokens: 4000           # Max tokens for context window
+      searchType: "hybrid"      # vector, keyword, hybrid
+      
+      # Production: More documents, higher threshold
+      # topK: 10
+      # similarityThreshold: 0.8
+      # maxTokens: 6000
+      # searchType: "hybrid"
+    
+    # Generation settings
+    generation:
+      maxTokens: 2048
+      temperature: 0.7
+      topP: 0.9
+      topK: 50
+      repetitionPenalty: 1.1
+      
+      # Production: More conservative generation
+      # maxTokens: 1024
+      # temperature: 0.5
+      # topP: 0.95
+      # topK: 40
+      # repetitionPenalty: 1.2
+    
+    # Caching configuration
+    cache:
+      enabled: true
+      ttl: 3600      # 1 hour cache
+      maxSize: 1000  # Max cache entries
+      
+      # Production: Longer cache, more entries
+      # enabled: true
+      # ttl: 7200      # 2 hours
+      # maxSize: 5000  # More cache entries
+
+# =============================================================================
+# 7. HEALTH CHECKS
+# =============================================================================
+
+# Liveness probe: Detects if container is alive
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# Readiness probe: Detects if container is ready to serve traffic
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
+
+# Startup probe: For slow-starting containers
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+  successThreshold: 1
+
+# =============================================================================
+# 8. SECURITY CONTEXT
+# =============================================================================
+
+# Container security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+# =============================================================================
+# 9. SERVICE ACCOUNT
+# =============================================================================
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  
+  # OpenShift OAuth integration
+  # annotations:
+  #   serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"rag-openshift-ai-api"}}'
+
+# =============================================================================
+# 10. NETWORK POLICY
+# =============================================================================
+
+networkPolicy:
+  enabled: true
+  
+  # Ingress rules: Who can access the API
+  ingressRules:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+  
+  # Egress rules: What the API can access
+  egressRules:
+    # Allow access to Elasticsearch
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: elasticsearch
+      ports:
+        - protocol: TCP
+          port: 9200
+    
+    # Allow access to vLLM service
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: vllm
+      ports:
+        - protocol: TCP
+          port: 8000
+    
+    # Allow DNS resolution
+    - ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# =============================================================================
+# 11. HORIZONTAL POD AUTOSCALER
+# =============================================================================
+
+hpa:
+  enabled: true
+  
+  # Development: No autoscaling
+  # enabled: false
+  
+  minReplicas: 2
+  maxReplicas: 10
+  
+  # Scaling thresholds
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  
+  # Scaling behavior
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+
+# =============================================================================
+# 12. MONITORING CONFIGURATION
+# =============================================================================
+
+monitoring:
+  enabled: true
+  
+  # ServiceMonitor for Prometheus
+  serviceMonitor:
+    enabled: true
+    interval: "30s"
+    path: "/api/v1/metrics"
+    port: "http"
+    scrapeTimeout: "10s"
+    honorLabels: true
+    
+    # Additional labels for Prometheus operator
+    # additionalLabels:
+    #   release: prometheus
+    #   team: ai-platform
+  
+  # PodMonitor (alternative to ServiceMonitor)
+  podMonitor:
+    enabled: false
+  
+  # Grafana Dashboard
+  grafanaDashboard:
+    enabled: false
+    # dashboard: |
+    #   {
+    #     "dashboard": {
+    #       "title": "RAG API Dashboard",
+    #       "panels": []
+    #     }
+    #   }
+
+# =============================================================================
+# 13. LOGGING CONFIGURATION
+# =============================================================================
+
+logging:
+  level: "INFO"
+  format: "json"
+  output: "stdout"
+  
+  # Fluentd configuration (optional)
+  fluentd:
+    enabled: false
+    # config: |
+    #   <source>
+    #     @type tail
+    #     path /var/log/containers/*.log
+    #     pos_file /var/log/fluentd-containers.log.pos
+    #     tag kubernetes.*
+    #     read_from_head true
+    #     <parse>
+    #       @type json
+    #       time_format %Y-%m-%dT%H:%M:%S.%NZ
+    #     </parse>
+    #   </source>
+
+# =============================================================================
+# 14. ENVIRONMENT VARIABLES
+# =============================================================================
+
+# These are automatically generated from the config section above
+# You can override specific values here if needed
+env: []
+# env:
+#   - name: CUSTOM_VAR
+#     value: "custom_value"
+#   - name: API_KEY
+#     valueFrom:
+#       secretKeyRef:
+#         name: api-secrets
+#         key: api-key
+
+# =============================================================================
+# 15. SECRETS MANAGEMENT
+# =============================================================================
+
+secrets:
+  # Elasticsearch credentials
+  elasticsearch:
+    enabled: false
+    # secretName: elasticsearch-credentials
+    # usernameKey: username
+    # passwordKey: password
+  
+  # vLLM API credentials
+  vllm:
+    enabled: false
+    # secretName: vllm-credentials
+    # apiKeyKey: api-key
+
+# =============================================================================
+# 16. CONFIGMAPS
+# =============================================================================
+
+configMaps:
+  appConfig:
+    enabled: true
+    # Additional configuration files can be mounted here
+
+# =============================================================================
+# 17. VOLUMES AND VOLUME MOUNTS
+# =============================================================================
+
+volumes: []
+volumeMounts: []
+
+# Example: Persistent storage for document cache
+# volumes:
+#   - name: cache-volume
+#     persistentVolumeClaim:
+#       claimName: rag-cache-pvc
+# volumeMounts:
+#   - name: cache-volume
+#     mountPath: /app/cache
+
+# Example: Config file mount
+# volumes:
+#   - name: config-volume
+#     configMap:
+#       name: rag-api-config
+# volumeMounts:
+#   - name: config-volume
+#     mountPath: /app/config
+#     readOnly: true
+
+# =============================================================================
+# 18. NODE SELECTOR AND AFFINITY
+# =============================================================================
+
+# Node selector for specific node types
+nodeSelector: {}
+# nodeSelector:
+#   node-role.kubernetes.io/worker: "true"
+#   accelerator: gpu
+
+# Pod affinity/anti-affinity
+affinity: {}
+# Example: Pod anti-affinity for high availability
+# affinity:
+#   podAntiAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#     - weight: 100
+#       podAffinityTerm:
+#         labelSelector:
+#           matchExpressions:
+#           - key: app.kubernetes.io/name
+#             operator: In
+#             values:
+#             - rag-openshift-ai-api
+#         topologyKey: kubernetes.io/hostname
+
+# =============================================================================
+# 19. TOLERATIONS
+# =============================================================================
+
+tolerations: []
+# Example: Tolerate tainted nodes
+# tolerations:
+#   - key: "node-role.kubernetes.io/master"
+#     operator: "Exists"
+#     effect: "NoSchedule"
+
+# =============================================================================
+# 20. ANNOTATIONS AND LABELS
+# =============================================================================
+
+# Deployment annotations
+deploymentAnnotations: {}
+# deploymentAnnotations:
+#   fluxcd.io/automated: "true"
+#   fluxcd.io/tag.rag-api: glob:main-*
+
+# Deployment labels
+deploymentLabels: {}
+# deploymentLabels:
+#   app.kubernetes.io/component: api
+#   app.kubernetes.io/part-of: rag-system
+
+# =============================================================================
+# 21. INGRESS (Alternative to Route)
+# =============================================================================
+
+# Use this for Kubernetes instead of OpenShift Routes
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+# =============================================================================
+# 22. POD DISRUPTION BUDGET
+# =============================================================================
+
+pdb:
+  enabled: true
+  minAvailable: 1
+  # Alternative: maxUnavailable: 1
+
+# =============================================================================
+# 23. PRIORITY CLASS
+# =============================================================================
+
+priorityClassName: ""
+# Example: "high-priority"
+
+# =============================================================================
+# 24. TERMINATION GRACE PERIOD
+# =============================================================================
+
+terminationGracePeriodSeconds: 30
+
+# =============================================================================
+# 25. IMAGE PULL SECRETS
+# =============================================================================
+
+imagePullSecrets: []
+# imagePullSecrets:
+#   - name: registry-secret
+
+# =============================================================================
+# 26. INIT CONTAINERS
+# =============================================================================
+
+initContainers: []
+# Example: Wait for dependencies
+# initContainers:
+#   - name: wait-for-elasticsearch
+#     image: busybox:1.35
+#     command: ['sh', '-c', 'until wget -qO- http://elasticsearch:9200; do echo waiting for elasticsearch; sleep 2; done;']
+#   - name: wait-for-vllm
+#     image: busybox:1.35
+#     command: ['sh', '-c', 'until wget -qO- http://vllm-service:8000/health; do echo waiting for vllm; sleep 2; done;']
+
+# =============================================================================
+# 27. SIDECAR CONTAINERS
+# =============================================================================
+
+sidecarContainers: []
+# Example: Logging sidecar
+# sidecarContainers:
+#   - name: log-sidecar
+#     image: fluent/fluent-bit:latest
+#     ports:
+#       - containerPort: 2020
+#     volumeMounts:
+#       - name: varlog
+#         mountPath: /var/log
+
+# =============================================================================
+# 28. LIFECYCLE HOOKS
+# =============================================================================
+
+lifecycle:
+  preStop:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "sleep 10"
+  postStart:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "echo 'Container started'"
+
+# =============================================================================
+# 29. POD TEMPLATE ANNOTATIONS AND LABELS
+# =============================================================================
+
+podTemplateAnnotations: {}
+# podTemplateAnnotations:
+#   checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+
+podTemplateLabels: {}
+# podTemplateLabels:
+#   app.kubernetes.io/component: api
+
+# =============================================================================
+# ENVIRONMENT-SPECIFIC EXAMPLES
+# =============================================================================
+
+# =================================================================
+# DEVELOPMENT ENVIRONMENT
+# =================================================================
+# Copy this section and uncomment for development:
+#
+# replicaCount: 1
+# resources:
+#   requests:
+#     cpu: 250m
+#     memory: 512Mi
+#   limits:
+#     cpu: 1000m
+#     memory: 2Gi
+# config:
+#   api:
+#     debug: true
+#     logLevel: "DEBUG"
+#   rag:
+#     retrieval:
+#       topK: 3
+#       similarityThreshold: 0.5
+# monitoring:
+#   enabled: false
+
+# =================================================================
+# PRODUCTION ENVIRONMENT
+# =================================================================
+# Copy this section and uncomment for production:
+#
+# replicaCount: 3
+# resources:
+#   requests:
+#     cpu: 1000m
+#     memory: 2Gi
+#   limits:
+#     cpu: 4000m
+#     memory: 8Gi
+# config:
+#   api:
+#     debug: false
+#     logLevel: "INFO"
+#     corsOrigins: 
+#       - "https://myapp.mycompany.com"
+#   rag:
+#     retrieval:
+#       topK: 10
+#       similarityThreshold: 0.8
+# monitoring:
+#   enabled: true
+#   serviceMonitor:
+#     enabled: true
+
+# =================================================================
+# STAGING ENVIRONMENT
+# =================================================================
+# Copy this section and uncomment for staging:
+#
+# replicaCount: 2
+# resources:
+#   requests:
+#     cpu: 500m
+#     memory: 1Gi
+#   limits:
+#     cpu: 2000m
+#     memory: 4Gi
+# config:
+#   api:
+#     debug: false
+#     logLevel: "INFO"
+# monitoring:
+#   enabled: true
+#   serviceMonitor:
+#     enabled: true
+
+# =============================================================================
+# INTEGRATION EXAMPLES
+# =============================================================================
+
+# =================================================================
+# ELASTICSEARCH INTEGRATION
+# =================================================================
+# Example with Elastic Cloud:
+# config:
+#   elasticsearch:
+#     url: "https://my-deployment.es.us-east-1.aws.cloud.es.io:9243"
+#     username: "elastic"
+#     password: "changeme"
+#     sslVerify: true
+#     index: "company-documents"
+
+# Example with local Elasticsearch:
+# config:
+#   elasticsearch:
+#     url: "http://elasticsearch-master.elastic-system.svc.cluster.local:9200"
+#     index: "rag-documents"
+#     sslVerify: false
+
+# =================================================================
+# VLLM INTEGRATION
+# =================================================================
+# Example with local vLLM:
+# config:
+#   vllm:
+#     endpoint: "http://vllm-service.vllm-system.svc.cluster.local:8000"
+#     defaultModel: "meta-llama/Llama-2-7b-chat-hf"
+
+# Example with external vLLM service:
+# config:
+#   vllm:
+#     endpoint: "https://vllm.mycompany.com:8000"
+#     defaultModel: "meta-llama/Llama-2-13b-chat-hf"
+#     timeout: 120
+
+# =================================================================
+# OPENSHIFT SPECIFIC
+# =================================================================
+# Example with OpenShift OAuth:
+# serviceAccount:
+#   annotations:
+#     serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"rag-openshift-ai-api"}}'
+
+# Example with OpenShift route annotations:
+# route:
+#   annotations:
+#     haproxy.router.openshift.io/timeout: 300s
+#     haproxy.router.openshift.io/rate-limit-connections: "true"
+
+# =============================================================================
+# TROUBLESHOOTING EXAMPLES
+# =============================================================================
+
+# =================================================================
+# DEBUG MODE
+# =================================================================
+# Enable debug mode for troubleshooting:
+# config:
+#   api:
+#     debug: true
+#     logLevel: "DEBUG"
+# resources:
+#   requests:
+#     cpu: 100m
+#     memory: 256Mi
+#   limits:
+#     cpu: 500m
+#     memory: 1Gi
+
+# =================================================================
+# MINIMAL RESOURCES
+# =================================================================
+# For resource-constrained environments:
+# resources:
+#   requests:
+#     cpu: 100m
+#     memory: 256Mi
+#   limits:
+#     cpu: 500m
+#     memory: 1Gi
+# replicaCount: 1
+# hpa:
+#   enabled: false
+
+# =================================================================
+# HIGH AVAILABILITY
+# =================================================================
+# For production high availability:
+# replicaCount: 3
+# hpa:
+#   enabled: true
+#   minReplicas: 3
+#   maxReplicas: 10
+# pdb:
+#   enabled: true
+#   minAvailable: 2
+# affinity:
+#   podAntiAffinity:
+#     requiredDuringSchedulingIgnoredDuringExecution:
+#     - labelSelector:
+#         matchExpressions:
+#         - key: app.kubernetes.io/name
+#           operator: In
+#           values:
+#           - rag-openshift-ai-api
+#       topologyKey: kubernetes.io/hostname
+
+# =============================================================================
+# END OF EXAMPLES
+# =============================================================================
+#
+# Remember to:
+# 1. Test your configuration in a staging environment first
+# 2. Monitor resource usage and adjust limits accordingly
+# 3. Set up proper monitoring and alerting
+# 4. Configure backup and disaster recovery procedures
+# 5. Document your specific configuration for your team
+#
+# For more information, see:
+# - docs/DEPLOYMENT.md
+# - helm/values.yaml (reference)
+# - API documentation at /docs when deployed 
