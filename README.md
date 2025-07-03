@@ -19,7 +19,6 @@ A Retrieval-Augmented Generation (RAG) API service designed for enterprise envir
 - `oc` CLI tool installed and configured
 - `podman` or `docker` for container builds
 - **Prometheus Operator** (for monitoring)
-- **OpenShift Service Mesh** (optional, for advanced networking)
 
 ## 🏗️ Architecture
 
@@ -47,7 +46,6 @@ A Retrieval-Augmented Generation (RAG) API service designed for enterprise envir
 - **Security**: Security Context Constraints (SCC), Network Policies, Pod Security Standards
 - **Deployment**: OpenShift 4.18+, Kubernetes 1.28+
 - **Testing**: pytest, integration tests, load testing
-- **Observability**: Prometheus, Grafana, AlertManager
 
 ## 📦 Installation
 
@@ -64,7 +62,7 @@ cd rag-openshift-ai-api
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Install development dependencies
+# Install testing dependencies
 pip install pytest pytest-cov pytest-xdist pytest-html
 ```
 
@@ -111,13 +109,16 @@ ENV_SECRET_KEY=your-secret-key-change-this-in-deployment
 ENV_METRICS_ENABLED=true
 ```
 
-## 🚀 Deployment Options
+## 🚀 Deployment
 
 ### Automated Deployment Scripts
 
 This project includes several automation scripts for easy deployment:
 
 ```bash
+# Complete deployment pipeline
+./scripts/quick-deploy.sh
+
 # OpenShift Build Script (handles command separation automatically)
 ./scripts/openshift-build.sh -f Containerfile
 
@@ -125,10 +126,7 @@ This project includes several automation scripts for easy deployment:
 ./scripts/build-docker.sh --platform linux/amd64
 
 # Helm Installation Script (automated Helm deployment)
-./scripts/helm-install.sh --environment production
-
-# Quick Deploy Script (complete deployment pipeline)
-./scripts/quick-deploy.sh
+./scripts/helm-install.sh
 ```
 
 ### Option 1: Helm Installation (Recommended)
@@ -144,15 +142,11 @@ sudo mv linux-amd64/helm /usr/local/bin/
 
 # Verify Helm installation
 helm version
-
-# Add required repositories (if needed)
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
 ```
 
 #### Quick Installation
 
-**Option A: Using the installation script (Recommended)**
+**Using the installation script (Recommended)**
 
 ```bash
 # Install with default settings
@@ -165,7 +159,7 @@ helm repo update
 ./scripts/helm-install.sh -d
 ```
 
-**Option B: Manual Helm installation**
+**Manual Helm installation**
 
 ```bash
 # 1. Create namespace
@@ -237,126 +231,61 @@ helm install rag-api ./helm \
 helm status rag-api -n rag-openshift-ai
 ```
 
-#### Advanced Configuration
+### Option 2: OpenShift Native Deployment
+
+#### Prerequisites
 
 ```bash
-# Install with specific configurations
-helm install rag-api ./helm \
-  --namespace rag-openshift-ai \
-  --create-namespace \
-  --set image.repository=your-registry.com/rag-api \
-  --set image.tag=latest \
-  --set app.replicas=3 \
-  --set elasticsearch.url=https://your-elasticsearch:9200 \
-  --set vllm.endpoint=http://your-vllm-service:8000 \
-  --set monitoring.serviceMonitor.enabled=true \
-  --set monitoring.prometheusRule.enabled=true \
-  --set security.runAsNonRoot=true
+# Install OpenShift CLI
+# Download from: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/
+
+# Login to OpenShift
+oc login --token=<your-token> --server=<your-server>
 ```
 
-### Option 2: Manual Deployment
-
-#### 1. Build Container Image (OpenShift 4.18+ Optimized)
-
-**Important Note**: This project provides both `Containerfile` and `Dockerfile` for maximum compatibility. The `Containerfile` is the primary build file, while `Dockerfile` is provided for tools that expect it.
+#### Quick Deployment
 
 ```bash
-# Option 1: Using the build script (recommended)
-./scripts/build-docker.sh -f Containerfile -e podman
-
-# Option 2: Manual build with Podman
-podman build --platform linux/amd64 -t rag-api:latest .
-
-# Option 3: Manual build with Docker
-docker build --platform linux/amd64 -t rag-api:latest .
-
-# Tag for your registry (replace with your registry)
-podman tag rag-api:latest your-registry.com/rag-api:latest
-
-# Push to registry
-podman push your-registry.com/rag-api:latest
+# Deploy everything at once (recommended)
+oc apply -f openshift/deployment.yaml
 ```
 
-# Alternative: Build directly in OpenShift
-# Note: Execute these commands separately, not together
+#### Manual Deployment
 
-# Option 1: Using Containerfile (recommended)
+```bash
+# 1. Create OpenShift Project
+oc new-project rag-openshift-ai
+
+# 2. Build Container Image
+
+# Option A: Using automated script (recommended)
+./scripts/openshift-build.sh -f Containerfile
+
+# Option B: Manual build commands
 # Step 1: Create build configuration
 oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
 
 # Step 2: Start the build
 oc start-build rag-api --from-dir=. --follow
 
-# Option 2: Using Dockerfile (for compatibility)
-# Step 1: Create build configuration
-oc new-build --strategy=docker --binary --name=rag-api
-
-# Step 2: Start the build
-oc start-build rag-api --from-dir=. --follow
-
-# Option 3: Using the automated script (recommended)
-./scripts/openshift-build.sh -f Containerfile
-
-# Step 3: Wait for deployment
-oc rollout status deployment/rag-api
-```
-
-### 2. Create OpenShift Project
-
-```bash
-# Create new project
-oc new-project rag-openshift-ai
-
-# Or use existing project
-oc project rag-openshift-ai
-```
-
-#### 3. Deploy Complete Application
-
-```bash
-# Deploy everything at once (recommended)
+# 3. Deploy Application
 oc apply -f openshift/deployment.yaml
 
-# Or deploy step by step if needed
-oc create serviceaccount rag-api-sa
-oc apply -f openshift/deployment.yaml
-```
-
-#### 4. Verify Deployment (OpenShift 4.18+)
-
-```bash
-# Check deployment status
+# 4. Verify Deployment
 oc get deployment rag-api
-
-# Check pods with detailed information
-oc get pods -l app=rag-api -o wide
-
-# Check service
+oc get pods -l app=rag-api
 oc get service rag-api
-
-# Check route
 oc get route rag-api
+```
 
-# Check Security Context Constraints
-oc get scc rag-api-scc
+### Option 3: Docker/Podman Build
 
-# Check Network Policies
-oc get networkpolicy rag-api-network-policy
+```bash
+# Build image locally
+./scripts/build-docker.sh --platform linux/amd64
 
-# Check Service Monitor
-oc get servicemonitor rag-api-monitor
-
-# Check Prometheus Rules
-oc get prometheusrule rag-api-alerts
-
-# Check logs with structured format
-oc logs -l app=rag-api --tail=50 --timestamps
-
-# Check resource usage
-oc top pods -l app=rag-api
-
-# Check events
-oc get events --sort-by='.lastTimestamp' | grep rag-api
+# Build and push to registry
+./scripts/build-docker.sh --registry your-registry.com --push
 ```
 
 ## 🧪 Testing
@@ -401,7 +330,7 @@ curl -X POST https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/query
 curl https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/metrics
 ```
 
-## 📊 Monitoring & Observability (OpenShift 4.18+)
+## 📊 Monitoring & Observability
 
 ### Health Checks
 
@@ -414,9 +343,6 @@ curl http://localhost:8000/ready
 
 # API info
 curl http://localhost:8000/api/v1/info
-
-# Detailed health with OpenShift headers
-curl -H "User-Agent: OpenShift-Health-Check" http://localhost:8000/health
 ```
 
 ### Prometheus Metrics
@@ -428,9 +354,6 @@ curl http://localhost:8000/api/v1/metrics
 # Specific metrics
 curl http://localhost:8000/api/v1/metrics | grep rag_api_requests_total
 curl http://localhost:8000/api/v1/metrics | grep rag_api_request_duration_seconds
-
-# Service Monitor verification
-oc get servicemonitor rag-api-monitor -o yaml
 ```
 
 ### Grafana Dashboard
@@ -445,21 +368,6 @@ oc get route grafana -n openshift-monitoring
 # Navigate to: Monitoring > Dashboards > RAG API Dashboard
 ```
 
-### Alerting
-
-Monitor alerts in OpenShift:
-
-```bash
-# Check Prometheus rules
-oc get prometheusrule rag-api-alerts -o yaml
-
-# View alerts in Prometheus
-oc get route prometheus-k8s -n openshift-monitoring
-
-# Check AlertManager
-oc get route alertmanager-main -n openshift-monitoring
-```
-
 ### Structured Logging
 
 ```bash
@@ -471,139 +379,103 @@ oc logs -l app=rag-api -f --timestamps
 
 # Filter logs by level
 oc logs -l app=rag-api --tail=100 | jq 'select(.level == "ERROR")'
-
-# Logs with correlation IDs
-oc logs -l app=rag-api --tail=100 | jq '.correlation_id'
-```
-
-### Performance Monitoring
-
-```bash
-# Resource usage
-oc top pods -l app=rag-api
-
-# Pod metrics
-oc adm top pods --containers -l app=rag-api
-
-# Node resource usage
-oc adm top nodes
-
-# HPA status
-oc get hpa rag-api-hpa -o yaml
 ```
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `API_HOST` | Host to bind the server | `0.0.0.0` |
-| `API_PORT` | Port to bind the server | `8000` |
-| `API_DEBUG` | Debug mode | `false` |
-| `ES_URL` | ElasticSearch URL | `https://localhost:9200` |
-| `ES_INDEX_NAME` | Index name for documents | `rag_documents` |
-| `VLLM_URL` | vLLM server URL | `http://localhost:8001` |
-| `VLLM_MODEL_NAME` | Default model name | `RedHatAI/granite-3.1-8b-instruct` |
-| `EMBEDDING_MODEL_NAME` | Embedding model name | `sentence-transformers/all-MiniLM-L6-v2` |
-| `RAG_TOP_K` | Number of documents to retrieve | `5` |
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `API_HOST` | API host binding | `0.0.0.0` | No |
+| `API_PORT` | API port | `8000` | No |
+| `API_DEBUG` | Debug mode | `false` | No |
+| `ES_URL` | ElasticSearch URL | - | Yes |
+| `ES_USERNAME` | ElasticSearch username | - | No |
+| `ES_PASSWORD` | ElasticSearch password | - | No |
+| `VLLM_URL` | vLLM server URL | - | Yes |
+| `VLLM_MODEL_NAME` | vLLM model name | `RedHatAI/granite-3.1-8b-instruct` | No |
+| `EMBEDDING_MODEL_NAME` | Embedding model name | `all-MiniLM-L6-v2` | No |
+| `RAG_TOP_K` | Number of documents to retrieve | `5` | No |
+| `RAG_SIMILARITY_THRESHOLD` | Minimum similarity score | `0.7` | No |
 
 ### Resource Requirements
 
-| Component | CPU Request | CPU Limit | Memory Request | Memory Limit |
-|-----------|-------------|-----------|----------------|--------------|
-| RAG API | 250m | 500m | 512Mi | 1Gi |
-| ElasticSearch | 500m | 1000m | 1Gi | 2Gi |
-| vLLM Server | 1000m | 2000m | 2Gi | 4Gi |
+#### Minimum Requirements
+- CPU: 500m (request), 2000m (limit)
+- Memory: 1Gi (request), 4Gi (limit)
+- Storage: 1Gi for models
 
-## 🔒 Security (OpenShift 4.18+)
+#### Recommended Requirements
+- CPU: 1000m (request), 4000m (limit)
+- Memory: 2Gi (request), 8Gi (limit)
+- Storage: 2Gi for models
 
-### Security Context Constraints (SCC)
+## 🔒 Security
 
-The deployment includes custom SCC for enhanced security:
+### Security Context
 
-- **Non-root execution**: UID/GID 1001
-- **Read-only root filesystem**: Prevents file system modifications
-- **No privilege escalation**: Enhanced security posture
-- **Seccomp profiles**: RuntimeDefault for container isolation
-- **Capability restrictions**: All capabilities dropped
-- **Volume restrictions**: Only necessary volume types allowed
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+```
 
 ### Network Policies
 
-Advanced network security with granular control:
-
-- **Ingress**: Only from allowed namespaces and services
-- **Egress**: Restricted to ElasticSearch, vLLM, and DNS only
-- **Port restrictions**: Specific ports for each service
-- **Namespace isolation**: Prevents unauthorized cross-namespace communication
-
-### Pod Security Standards
-
-Compliant with Kubernetes Pod Security Standards:
-
-- **Level**: Restricted (highest security level)
-- **Version**: v1.24+ compatible
-- **Enforcement**: Audit, Warn, and Enforce modes
-- **Runtime security**: Seccomp and AppArmor profiles
-
-### Secrets Management
-
-Enterprise-grade secrets handling:
-
-- **Encryption at rest**: All secrets encrypted
-- **RBAC protection**: Role-based access control
-- **Audit logging**: All secret access logged
-- **Rotation support**: Easy secret rotation process
-
-### Compliance Features
-
-- **SOC 2 Type II** ready configurations
-- **GDPR** compliant data handling
-- **HIPAA** compatible security measures
-- **PCI DSS** security controls
-
-## 📈 Scaling
-
-### Horizontal Scaling
-
-```bash
-# Scale manually
-oc scale deployment rag-api --replicas=5
-
-# Check HPA status
-oc get hpa rag-api-hpa
-
-# View scaling events
-oc describe hpa rag-api-hpa
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-api-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: rag-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: allowed-namespace
+      ports:
+        - protocol: TCP
+          port: 8000
 ```
 
-### Vertical Scaling
+## 📚 API Documentation
+
+For detailed API documentation, see [docs/api.md](docs/api.md).
+
+### Quick API Examples
 
 ```bash
-# Update resource limits
-oc patch deployment rag-api -p '{
-  "spec": {
-    "template": {
-      "spec": {
-        "containers": [{
-          "name": "rag-api",
-          "resources": {
-            "requests": {"memory": "1Gi", "cpu": "500m"},
-            "limits": {"memory": "2Gi", "cpu": "1000m"}
-          }
-        }]
-      }
-    }
-  }
-}'
+# Health check
+curl https://rag-api-rag-openshift-ai.apps.your-cluster.com/health
+
+# Query with authentication (if enabled)
+curl -X POST https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is OpenShift?",
+    "top_k": 3
+  }'
+
+# Get metrics
+curl https://rag-api-rag-openshift-ai.apps.your-cluster.com/api/v1/metrics
 ```
 
 ## 🚨 Troubleshooting
 
 ### Common Issues
 
-#### 1. Pod Not Starting
+#### 1. Pod Startup Failures
 
 ```bash
 # Check pod status
@@ -669,3 +541,70 @@ oc top pods -l app=rag-api
 # Check resource limits
 oc describe pod <pod-name> | grep -A 10 "Limits:"
 ```
+
+### Debug Commands
+
+```bash
+# Enable debug logging
+oc set env deployment/rag-api API_DEBUG=true
+
+# Restart deployment
+oc rollout restart deployment rag-api
+
+# Check rollout status
+oc rollout status deployment rag-api
+
+# Rollback if needed
+oc rollout undo deployment rag-api
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Run the test suite
+6. Submit a pull request
+
+### Development Setup
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run tests
+pytest
+
+# Run linting
+flake8 src/ tests/
+
+# Run type checking
+mypy src/
+```
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Documentation**: [docs/](docs/)
+- **Issues**: [GitHub Issues](https://github.com/your-org/rag-openshift-ai-api/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-org/rag-openshift-ai-api/discussions)
+
+## 📚 Additional Documentation
+
+- [Helm Installation Guide](docs/HELM_INSTALLATION.md) - Complete Helm deployment guide
+- [API Documentation](docs/api.md) - Detailed API reference and examples
+- [OpenShift Deployment](docs/OPENSHIFT.md) - Manual OpenShift deployment instructions
+- [API Testing](docs/API_TESTING.md) - Testing strategies and examples
+
+## 🔗 Related Projects
+
+- [ElasticSearch](https://www.elastic.co/elasticsearch/)
+- [vLLM](https://github.com/vllm-project/vllm)
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [OpenShift](https://www.redhat.com/en/technologies/cloud-computing/openshift)
+- [Red Hat UBI](https://developers.redhat.com/products/ubi/overview)
+- [Prometheus Operator](https://prometheus-operator.dev/)
