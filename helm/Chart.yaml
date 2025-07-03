@@ -1,0 +1,27 @@
+apiVersion: v2
+name: rag-openshift-ai-api
+description: A Retrieval-Augmented Generation (RAG) API service designed for enterprise environments running on OpenShift
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - rag
+  - ai
+  - openshift
+  - elasticsearch
+  - vllm
+  - fastapi
+home: https://github.com/pkstaz/rag-openshift-ai-api
+sources:
+  - https://github.com/pkstaz/rag-openshift-ai-api
+maintainers:
+  - name: Carlos Estay
+    email: c.estay.g@gmail.com
+    url: https://github.com/pkstaz
+icon: https://raw.githubusercontent.com/pkstaz/rag-openshift-ai-api/main/docs/icon.png
+annotations:
+  category: AI/ML
+  licenses: MIT
+  support: OpenShift 4.18+
+  vendor: Carlos Estay
+  description: "RAG API for OpenShift with ElasticSearch and vLLM integration" 

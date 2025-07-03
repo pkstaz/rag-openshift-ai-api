@@ -9,7 +9,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .Values.app.replicas | default 2 }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   
   selector:
@@ -137,150 +137,108 @@ spec:
         
         ports:
         - name: http
-          containerPort: {{ .Values.service.targetPort }}
+          containerPort: {{ .Values.app.port }}
           protocol: TCP
         
-        {{- with .Values.securityContext }}
+        {{- with .Values.security }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
         
         {{- if .Values.resources }}
         resources:
-          {{- toYaml .Values.resources | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         
-        {{- if .Values.livenessProbe }}
         livenessProbe:
-          {{- toYaml .Values.livenessProbe | nindent 10 }}
-        {{- end }}
+          httpGet:
+            path: /health
+            port: {{ .Values.app.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         
-        {{- if .Values.readinessProbe }}
         readinessProbe:
-          {{- toYaml .Values.readinessProbe | nindent 10 }}
-        {{- end }}
-        
-        {{- if .Values.startupProbe }}
-        startupProbe:
-          {{- toYaml .Values.startupProbe | nindent 10 }}
-        {{- end }}
-        
-        {{- if .Values.lifecycle }}
-        lifecycle:
-          {{- toYaml .Values.lifecycle | nindent 10 }}
-        {{- end }}
+          httpGet:
+            path: /ready
+            port: {{ .Values.app.port }}
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
         
         env:
         # API Configuration
-        - name: API_LOG_LEVEL
-          value: {{ .Values.config.api.logLevel | quote }}
+        - name: API_HOST
+          value: "0.0.0.0"
+        - name: API_PORT
+          value: {{ .Values.app.port | quote }}
         - name: API_DEBUG
-          value: {{ .Values.config.api.debug | quote }}
+          value: {{ .Values.api.debug | quote }}
+        - name: API_LOG_LEVEL
+          value: {{ .Values.api.logLevel | quote }}
         - name: API_CORS_ORIGINS
-          value: {{ .Values.config.api.corsOrigins | join "," | quote }}
-        - name: API_MAX_REQUEST_SIZE
-          value: {{ .Values.config.api.maxRequestSize | quote }}
-        - name: API_REQUEST_TIMEOUT
-          value: {{ .Values.config.api.requestTimeout | quote }}
-        - name: API_RATE_LIMIT_ENABLED
-          value: {{ .Values.config.api.rateLimit.enabled | quote }}
-        - name: API_RATE_LIMIT_REQUESTS_PER_MINUTE
-          value: {{ .Values.config.api.rateLimit.requestsPerMinute | quote }}
-        - name: API_RATE_LIMIT_BURST_SIZE
-          value: {{ .Values.config.api.rateLimit.burstSize | quote }}
+          value: {{ .Values.api.corsOrigins | join "," | quote }}
+        - name: API_CORS_METHODS
+          value: {{ .Values.api.corsMethods | join "," | quote }}
         
         # Elasticsearch Configuration
-        - name: ELASTICSEARCH_URL
-          value: {{ .Values.config.elasticsearch.url | quote }}
-        - name: ELASTICSEARCH_INDEX
-          value: {{ .Values.config.elasticsearch.index | quote }}
-        - name: ELASTICSEARCH_SSL_VERIFY
-          value: {{ .Values.config.elasticsearch.sslVerify | quote }}
-        - name: ELASTICSEARCH_TIMEOUT
-          value: {{ .Values.config.elasticsearch.timeout | quote }}
-        - name: ELASTICSEARCH_MAX_RETRIES
-          value: {{ .Values.config.elasticsearch.maxRetries | quote }}
-        - name: ELASTICSEARCH_MAX_CONNECTIONS
-          value: {{ .Values.config.elasticsearch.maxConnections | quote }}
-        - name: ELASTICSEARCH_RETRY_ON_TIMEOUT
-          value: {{ .Values.config.elasticsearch.retryOnTimeout | quote }}
-        
-        {{- if .Values.secrets.elasticsearch.enabled }}
-        - name: ELASTICSEARCH_USERNAME
+        - name: ES_URL
+          value: {{ .Values.elasticsearch.url | quote }}
+        - name: ES_INDEX_NAME
+          value: {{ .Values.elasticsearch.indexName | quote }}
+        - name: ES_USERNAME
+          value: {{ .Values.elasticsearch.username | quote }}
+        - name: ES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.secrets.elasticsearch.secretName }}
-              key: {{ .Values.secrets.elasticsearch.usernameKey | default "username" }}
-        - name: ELASTICSEARCH_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.secrets.elasticsearch.secretName }}
-              key: {{ .Values.secrets.elasticsearch.passwordKey | default "password" }}
-        {{- else }}
-        - name: ELASTICSEARCH_USERNAME
-          value: {{ .Values.config.elasticsearch.username | quote }}
-        - name: ELASTICSEARCH_PASSWORD
-          value: {{ .Values.config.elasticsearch.password | quote }}
-        {{- end }}
+              name: {{ include "rag-openshift-ai-api.fullname" . }}-secrets
+              key: es-password
+        - name: ES_TIMEOUT
+          value: {{ .Values.elasticsearch.timeout | quote }}
+        - name: ES_VECTOR_DIMENSION
+          value: {{ .Values.elasticsearch.vectorDimension | quote }}
         
         # vLLM Configuration
-        - name: VLLM_ENDPOINT
-          value: {{ .Values.config.vllm.endpoint | quote }}
-        - name: VLLM_DEFAULT_MODEL
-          value: {{ .Values.config.vllm.defaultModel | quote }}
-        - name: VLLM_MAX_TOKENS
-          value: {{ .Values.config.vllm.maxTokens | quote }}
-        - name: VLLM_TEMPERATURE
-          value: {{ .Values.config.vllm.temperature | quote }}
-        - name: VLLM_TOP_P
-          value: {{ .Values.config.vllm.topP | quote }}
+        - name: VLLM_URL
+          value: {{ .Values.vllm.endpoint | quote }}
+        - name: VLLM_MODEL_NAME
+          value: {{ .Values.vllm.defaultModel | quote }}
         - name: VLLM_TIMEOUT
-          value: {{ .Values.config.vllm.timeout | quote }}
+          value: {{ .Values.vllm.timeout | quote }}
+        - name: VLLM_TEMPERATURE
+          value: {{ .Values.vllm.temperature | quote }}
+        - name: VLLM_MAX_TOKENS
+          value: {{ .Values.vllm.maxTokens | quote }}
         
-        {{- if .Values.secrets.vllm.enabled }}
-        - name: VLLM_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.secrets.vllm.secretName }}
-              key: {{ .Values.secrets.vllm.apiKeyKey | default "api-key" }}
-        {{- end }}
+        # Embedding Configuration
+        - name: EMBEDDING_MODEL_NAME
+          value: {{ .Values.embedding.modelName | quote }}
+        - name: EMBEDDING_DEVICE
+          value: {{ .Values.embedding.device | quote }}
+        - name: EMBEDDING_BATCH_SIZE
+          value: {{ .Values.embedding.batchSize | quote }}
         
         # RAG Configuration
         - name: RAG_TOP_K
-          value: {{ .Values.config.rag.retrieval.topK | quote }}
+          value: {{ .Values.rag.topK | quote }}
         - name: RAG_SIMILARITY_THRESHOLD
-          value: {{ .Values.config.rag.retrieval.similarityThreshold | quote }}
-        - name: RAG_MAX_TOKENS
-          value: {{ .Values.config.rag.retrieval.maxTokens | quote }}
+          value: {{ .Values.rag.similarityThreshold | quote }}
         - name: RAG_SEARCH_TYPE
-          value: {{ .Values.config.rag.retrieval.searchType | quote }}
-        - name: RAG_GENERATION_MAX_TOKENS
-          value: {{ .Values.config.rag.generation.maxTokens | quote }}
-        - name: RAG_GENERATION_TEMPERATURE
-          value: {{ .Values.config.rag.generation.temperature | quote }}
-        - name: RAG_GENERATION_TOP_P
-          value: {{ .Values.config.rag.generation.topP | quote }}
-        - name: RAG_GENERATION_TOP_K
-          value: {{ .Values.config.rag.generation.topK | quote }}
-        - name: RAG_GENERATION_REPETITION_PENALTY
-          value: {{ .Values.config.rag.generation.repetitionPenalty | quote }}
-        - name: RAG_CACHE_ENABLED
-          value: {{ .Values.config.rag.cache.enabled | quote }}
-        - name: RAG_CACHE_TTL
-          value: {{ .Values.config.rag.cache.ttl | quote }}
-        - name: RAG_CACHE_MAX_SIZE
-          value: {{ .Values.config.rag.cache.maxSize | quote }}
+          value: {{ .Values.rag.searchType | quote }}
+        - name: RAG_CHUNK_SIZE
+          value: {{ .Values.rag.chunkSize | quote }}
+        - name: RAG_CHUNK_OVERLAP
+          value: {{ .Values.rag.chunkOverlap | quote }}
         
-        # Logging Configuration
-        - name: LOG_LEVEL
-          value: {{ .Values.logging.level | quote }}
-        - name: LOG_FORMAT
-          value: {{ .Values.logging.format | quote }}
-        - name: LOG_OUTPUT
-          value: {{ .Values.logging.output | quote }}
-        
-        # Monitoring Configuration
-        - name: METRICS_ENABLED
+        # Application Configuration
+        - name: ENV_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "rag-openshift-ai-api.fullname" . }}-secrets
+              key: secret-key
+        - name: ENV_METRICS_ENABLED
           value: {{ .Values.monitoring.enabled | quote }}
         
         # Pod Information

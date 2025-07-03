@@ -52,7 +52,7 @@ A Retrieval-Augmented Generation (RAG) API service designed for enterprise envir
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-org/rag-openshift-ai-api.git
+git clone https://github.com/pkstaz/rag-openshift-ai-api.git
 cd rag-openshift-ai-api
 ```
 
@@ -590,8 +590,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🆘 Support
 
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/your-org/rag-openshift-ai-api/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/rag-openshift-ai-api/discussions)
+- **Issues**: [GitHub Issues](https://github.com/pkstaz/rag-openshift-ai-api/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/pkstaz/rag-openshift-ai-api/discussions)
 
 ## 📚 Additional Documentation
 
@@ -608,3 +608,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [OpenShift](https://www.redhat.com/en/technologies/cloud-computing/openshift)
 - [Red Hat UBI](https://developers.redhat.com/products/ubi/overview)
 - [Prometheus Operator](https://prometheus-operator.dev/)
+
+---
+
+**Author**: Carlos Estay  
+**GitHub**: [pkstaz](https://github.com/pkstaz)  
+**Email**: c.estay.g@gmail.com
