@@ -87,7 +87,7 @@ curl -X POST http://localhost:8000/api/v1/query \
 
 ```bash
 # Deploy to OpenShift
-./scripts/deploy.sh -n rag-demo -e production
+./scripts/helm-install.sh -t production -n rag-demo
 
 # Get route URL
 oc get route rag-api -o jsonpath='{.spec.host}'
