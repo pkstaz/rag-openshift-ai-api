@@ -33,7 +33,7 @@ class APISettings(BaseSettings):
 class ElasticsearchSettings(BaseSettings):
     """Elasticsearch configuration settings."""
     
-    url: str = Field(default="http://localhost:9200", description="Elasticsearch URL")
+    url: str = Field(default="https://localhost:9200", description="Elasticsearch URL")
     index_name: str = Field(default="rag_documents", description="Index name for documents")
     
     username: Optional[str] = Field(default=None, description="Elasticsearch username")
@@ -54,7 +54,7 @@ class VLLMSettings(BaseSettings):
     """vLLM configuration settings."""
     
     url: str = Field(default="http://localhost:8001", description="vLLM server URL")
-    model_name: str = Field(default="microsoft/DialoGPT-medium", description="Default model name")
+    model_name: str = Field(default="RedHatAI/granite-3.1-8b-instruct", description="Default model name")
     
     timeout: int = Field(default=60, description="Request timeout in seconds")
     max_retries: int = Field(default=3, description="Maximum retry attempts")

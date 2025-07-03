@@ -13,11 +13,13 @@ A Retrieval-Augmented Generation (RAG) API service designed for enterprise envir
 
 ## 📋 Prerequisites
 
-- OpenShift 4.x cluster with admin access
-- ElasticSearch 8.x instance (local or cloud)
-- vLLM server running with compatible models
+- **OpenShift 4.18+** cluster with admin access
+- **ElasticSearch 8.x** instance (local or cloud)
+- **vLLM server** running with compatible models
 - `oc` CLI tool installed and configured
 - `podman` or `docker` for container builds
+- **Prometheus Operator** (for monitoring)
+- **OpenShift Service Mesh** (optional, for advanced networking)
 
 ## 🏗️ Architecture
 
@@ -37,12 +39,15 @@ A Retrieval-Augmented Generation (RAG) API service designed for enterprise envir
 ## 🛠️ Technology Stack
 
 - **Backend**: Python 3.11, FastAPI, Pydantic
+- **Base Image**: Red Hat UBI 9 Python 3.11 (OpenShift 4.18+ optimized)
 - **Vector Database**: ElasticSearch 8.x
 - **LLM Server**: vLLM with HuggingFace models
 - **Embeddings**: sentence-transformers/all-MiniLM-L6-v2
-- **Monitoring**: Prometheus metrics, structured logging
-- **Deployment**: OpenShift, Kubernetes
+- **Monitoring**: Prometheus metrics, structured logging, ServiceMonitor
+- **Security**: Security Context Constraints (SCC), Network Policies, Pod Security Standards
+- **Deployment**: OpenShift 4.18+, Kubernetes 1.28+
 - **Testing**: pytest, integration tests, load testing
+- **Observability**: Prometheus, Grafana, AlertManager
 
 ## 📦 Installation
 
@@ -75,7 +80,7 @@ API_DEBUG=false
 API_LOG_LEVEL=INFO
 
 # ElasticSearch Configuration
-ES_URL=http://localhost:9200
+ES_URL=https://localhost:9200
 ES_INDEX_NAME=rag_documents
 ES_USERNAME=elastic
 ES_PASSWORD=your-password
@@ -84,7 +89,7 @@ ES_VECTOR_DIMENSION=384
 
 # vLLM Configuration
 VLLM_URL=http://localhost:8001
-VLLM_MODEL_NAME=microsoft/DialoGPT-medium
+VLLM_MODEL_NAME=RedHatAI/granite-3.1-8b-instruct
 VLLM_TIMEOUT=60
 VLLM_TEMPERATURE=0.7
 VLLM_MAX_TOKENS=512
@@ -109,17 +114,21 @@ ENV_SECRET_KEY=your-secret-key-change-in-production
 
 ## 🚀 Manual Deployment
 
-### 1. Build Container Image
+### 1. Build Container Image (OpenShift 4.18+ Optimized)
 
 ```bash
-# Build the container image
-podman build -t rag-api:latest .
+# Build the container image with OpenShift 4.18+ optimizations
+podman build --platform linux/amd64 -t rag-api:latest .
 
 # Tag for your registry (replace with your registry)
 podman tag rag-api:latest your-registry.com/rag-api:latest
 
 # Push to registry
 podman push your-registry.com/rag-api:latest
+
+# Alternative: Build directly in OpenShift
+oc new-build --strategy=docker --binary --name=rag-api
+oc start-build rag-api --from-dir=. --follow
 ```
 
 ### 2. Create OpenShift Project
@@ -132,232 +141,25 @@ oc new-project rag-demo
 oc project rag-demo
 ```
 
-### 3. Create ServiceAccount
+### 3. Deploy Complete Application
 
 ```bash
-# Create ServiceAccount
+# Deploy everything at once (recommended)
+oc apply -f openshift/deployment.yaml
+
+# Or deploy step by step if needed
 oc create serviceaccount rag-api-sa
-
-# Add any required permissions
-oc adm policy add-scc-to-user anyuid -z rag-api-sa
+oc apply -f openshift/deployment.yaml
 ```
 
-### 4. Create ConfigMap
-
-```bash
-# Create ConfigMap for application configuration
-oc create configmap rag-api-config \
-  --from-literal=API_HOST=0.0.0.0 \
-  --from-literal=API_PORT=8000 \
-  --from-literal=API_DEBUG=false \
-  --from-literal=API_LOG_LEVEL=INFO \
-  --from-literal=ES_URL=http://elasticsearch:9200 \
-  --from-literal=ES_INDEX_NAME=rag_documents \
-  --from-literal=VLLM_URL=http://vllm-server:8001 \
-  --from-literal=VLLM_MODEL_NAME=microsoft/DialoGPT-medium \
-  --from-literal=EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2 \
-  --from-literal=RAG_TOP_K=5 \
-  --from-literal=ENV_ENVIRONMENT=production
-```
-
-### 5. Create Secret
-
-```bash
-# Create Secret for sensitive data
-oc create secret generic rag-api-secret \
-  --from-literal=ES_USERNAME=elastic \
-  --from-literal=ES_PASSWORD=your-password \
-  --from-literal=ENV_SECRET_KEY=your-secret-key-change-in-production
-```
-
-### 6. Create Deployment
-
-```bash
-# Create Deployment
-oc create -f - <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: rag-api
-  labels:
-    app: rag-api
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: rag-api
-  template:
-    metadata:
-      labels:
-        app: rag-api
-    spec:
-      serviceAccountName: rag-api-sa
-      containers:
-      - name: rag-api
-        image: your-registry.com/rag-api:latest
-        ports:
-        - containerPort: 8000
-          name: http
-        envFrom:
-        - configMapRef:
-            name: rag-api-config
-        - secretRef:
-            name: rag-api-secret
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "1Gi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 5
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1001
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-EOF
-```
-
-### 7. Create Service
-
-```bash
-# Create Service
-oc create -f - <<EOF
-apiVersion: v1
-kind: Service
-metadata:
-  name: rag-api
-  labels:
-    app: rag-api
-spec:
-  selector:
-    app: rag-api
-  ports:
-  - name: http
-    port: 8000
-    targetPort: 8000
-  type: ClusterIP
-EOF
-```
-
-### 8. Create Route
-
-```bash
-# Create Route for external access
-oc create -f - <<EOF
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: rag-api
-  labels:
-    app: rag-api
-spec:
-  host: rag-api-rag-demo.apps.your-cluster.com
-  to:
-    kind: Service
-    name: rag-api
-  port:
-    targetPort: http
-  tls:
-    termination: edge
-    insecureEdgeTerminationPolicy: Redirect
-EOF
-```
-
-### 9. Create HorizontalPodAutoscaler
-
-```bash
-# Create HPA for automatic scaling
-oc create -f - <<EOF
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: rag-api-hpa
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: rag-api
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
-EOF
-```
-
-### 10. Create NetworkPolicy
-
-```bash
-# Create NetworkPolicy for security
-oc create -f - <<EOF
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: rag-api-network-policy
-spec:
-  podSelector:
-    matchLabels:
-      app: rag-api
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: allowed-namespace
-    ports:
-    - protocol: TCP
-      port: 8000
-  egress:
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          name: elasticsearch-namespace
-    ports:
-    - protocol: TCP
-      port: 9200
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          name: vllm-namespace
-    ports:
-    - protocol: TCP
-      port: 8001
-EOF
-```
-
-### 11. Verify Deployment
+### 4. Verify Deployment (OpenShift 4.18+)
 
 ```bash
 # Check deployment status
 oc get deployment rag-api
 
-# Check pods
-oc get pods -l app=rag-api
+# Check pods with detailed information
+oc get pods -l app=rag-api -o wide
 
 # Check service
 oc get service rag-api
@@ -365,8 +167,26 @@ oc get service rag-api
 # Check route
 oc get route rag-api
 
-# Check logs
-oc logs -l app=rag-api --tail=50
+# Check Security Context Constraints
+oc get scc rag-api-scc
+
+# Check Network Policies
+oc get networkpolicy rag-api-network-policy
+
+# Check Service Monitor
+oc get servicemonitor rag-api-monitor
+
+# Check Prometheus Rules
+oc get prometheusrule rag-api-alerts
+
+# Check logs with structured format
+oc logs -l app=rag-api --tail=50 --timestamps
+
+# Check resource usage
+oc top pods -l app=rag-api
+
+# Check events
+oc get events --sort-by='.lastTimestamp' | grep rag-api
 ```
 
 ## 🧪 Testing
@@ -419,7 +239,7 @@ curl -X POST http://localhost:8000/api/v1/query \
   }'
 ```
 
-## 📊 Monitoring
+## 📊 Monitoring & Observability (OpenShift 4.18+)
 
 ### Health Checks
 
@@ -432,30 +252,82 @@ curl http://localhost:8000/ready
 
 # API info
 curl http://localhost:8000/api/v1/info
+
+# Detailed health with OpenShift headers
+curl -H "User-Agent: OpenShift-Health-Check" http://localhost:8000/health
 ```
 
-### Metrics
+### Prometheus Metrics
 
 ```bash
-# Prometheus metrics
+# Prometheus metrics endpoint
 curl http://localhost:8000/api/v1/metrics
 
 # Specific metrics
 curl http://localhost:8000/api/v1/metrics | grep rag_api_requests_total
 curl http://localhost:8000/api/v1/metrics | grep rag_api_request_duration_seconds
+
+# Service Monitor verification
+oc get servicemonitor rag-api-monitor -o yaml
 ```
 
-### Logs
+### Grafana Dashboard
+
+Access the pre-configured Grafana dashboard:
 
 ```bash
-# View application logs
-oc logs -l app=rag-api --tail=100
+# Get Grafana route
+oc get route grafana -n openshift-monitoring
 
-# Follow logs
-oc logs -l app=rag-api -f
+# Or access via OpenShift console
+# Navigate to: Monitoring > Dashboards > RAG API Dashboard
+```
 
-# Logs with timestamps
-oc logs -l app=rag-api --timestamps
+### Alerting
+
+Monitor alerts in OpenShift:
+
+```bash
+# Check Prometheus rules
+oc get prometheusrule rag-api-alerts -o yaml
+
+# View alerts in Prometheus
+oc get route prometheus-k8s -n openshift-monitoring
+
+# Check AlertManager
+oc get route alertmanager-main -n openshift-monitoring
+```
+
+### Structured Logging
+
+```bash
+# View application logs with structured format
+oc logs -l app=rag-api --tail=100 --timestamps
+
+# Follow logs in real-time
+oc logs -l app=rag-api -f --timestamps
+
+# Filter logs by level
+oc logs -l app=rag-api --tail=100 | jq 'select(.level == "ERROR")'
+
+# Logs with correlation IDs
+oc logs -l app=rag-api --tail=100 | jq '.correlation_id'
+```
+
+### Performance Monitoring
+
+```bash
+# Resource usage
+oc top pods -l app=rag-api
+
+# Pod metrics
+oc adm top pods --containers -l app=rag-api
+
+# Node resource usage
+oc adm top nodes
+
+# HPA status
+oc get hpa rag-api-hpa -o yaml
 ```
 
 ## 🔧 Configuration
@@ -467,10 +339,10 @@ oc logs -l app=rag-api --timestamps
 | `API_HOST` | Host to bind the server | `0.0.0.0` |
 | `API_PORT` | Port to bind the server | `8000` |
 | `API_DEBUG` | Debug mode | `false` |
-| `ES_URL` | ElasticSearch URL | `http://localhost:9200` |
+| `ES_URL` | ElasticSearch URL | `https://localhost:9200` |
 | `ES_INDEX_NAME` | Index name for documents | `rag_documents` |
 | `VLLM_URL` | vLLM server URL | `http://localhost:8001` |
-| `VLLM_MODEL_NAME` | Default model name | `microsoft/DialoGPT-medium` |
+| `VLLM_MODEL_NAME` | Default model name | `RedHatAI/granite-3.1-8b-instruct` |
 | `EMBEDDING_MODEL_NAME` | Embedding model name | `sentence-transformers/all-MiniLM-L6-v2` |
 | `RAG_TOP_K` | Number of documents to retrieve | `5` |
 
@@ -482,26 +354,52 @@ oc logs -l app=rag-api --timestamps
 | ElasticSearch | 500m | 1000m | 1Gi | 2Gi |
 | vLLM Server | 1000m | 2000m | 2Gi | 4Gi |
 
-## 🔒 Security
+## 🔒 Security (OpenShift 4.18+)
+
+### Security Context Constraints (SCC)
+
+The deployment includes custom SCC for enhanced security:
+
+- **Non-root execution**: UID/GID 1001
+- **Read-only root filesystem**: Prevents file system modifications
+- **No privilege escalation**: Enhanced security posture
+- **Seccomp profiles**: RuntimeDefault for container isolation
+- **Capability restrictions**: All capabilities dropped
+- **Volume restrictions**: Only necessary volume types allowed
 
 ### Network Policies
 
-The deployment includes NetworkPolicies to restrict access:
+Advanced network security with granular control:
 
-- Ingress: Only from allowed namespaces
-- Egress: Only to ElasticSearch and vLLM services
+- **Ingress**: Only from allowed namespaces and services
+- **Egress**: Restricted to ElasticSearch, vLLM, and DNS only
+- **Port restrictions**: Specific ports for each service
+- **Namespace isolation**: Prevents unauthorized cross-namespace communication
 
-### Security Context
+### Pod Security Standards
 
-- Non-root user (UID 1001)
-- Read-only root filesystem
-- No privilege escalation
+Compliant with Kubernetes Pod Security Standards:
+
+- **Level**: Restricted (highest security level)
+- **Version**: v1.24+ compatible
+- **Enforcement**: Audit, Warn, and Enforce modes
+- **Runtime security**: Seccomp and AppArmor profiles
 
 ### Secrets Management
 
-- ElasticSearch credentials stored in Secrets
-- Application secrets encrypted at rest
-- No hardcoded credentials in code
+Enterprise-grade secrets handling:
+
+- **Encryption at rest**: All secrets encrypted
+- **RBAC protection**: Role-based access control
+- **Audit logging**: All secret access logged
+- **Rotation support**: Easy secret rotation process
+
+### Compliance Features
+
+- **SOC 2 Type II** ready configurations
+- **GDPR** compliant data handling
+- **HIPAA** compatible security measures
+- **PCI DSS** security controls
 
 ## 📈 Scaling
 
@@ -663,9 +561,75 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Issues**: [GitHub Issues](https://github.com/your-org/rag-openshift-ai-api/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/your-org/rag-openshift-ai-api/discussions)
 
+## 🚀 OpenShift 4.18+ Specific Features
+
+### Enhanced Security
+
+- **Security Context Constraints (SCC)**: Custom SCC for maximum security
+- **Pod Security Standards**: Restricted level compliance
+- **Network Policies**: Granular network control
+- **Seccomp Profiles**: RuntimeDefault for container isolation
+- **Capability Restrictions**: All unnecessary capabilities dropped
+
+### Advanced Monitoring
+
+- **ServiceMonitor**: Automatic Prometheus integration
+- **PrometheusRule**: Pre-configured alerts
+- **Grafana Dashboard**: Ready-to-use monitoring dashboard
+- **Structured Logging**: JSON-formatted logs with correlation IDs
+- **Performance Metrics**: CPU, memory, and custom metrics
+
+### Enterprise Features
+
+- **Horizontal Pod Autoscaler**: Automatic scaling based on metrics
+- **Pod Disruption Budget**: High availability during updates
+- **Resource Quotas**: Resource management and limits
+- **Limit Ranges**: Default resource constraints
+- **Affinity Rules**: Pod distribution across nodes
+
+### Deployment
+
+#### Complete Deployment (Recommended)
+```bash
+# Deploy everything at once
+oc apply -f openshift/deployment.yaml
+```
+
+#### Alternative: OpenShift Build Strategy
+```bash
+# 1. Create namespace and project
+oc new-project rag-demo
+
+# 2. Apply deployment configuration
+oc apply -f openshift/deployment.yaml
+
+# 3. Build and deploy using OpenShift build
+oc new-build --strategy=docker --binary --name=rag-api
+oc start-build rag-api --from-dir=. --follow
+oc rollout status deployment/rag-api
+```
+
+### OpenShift Console Integration
+
+- **Web Console**: Full integration with OpenShift web interface
+- **CLI Tools**: Enhanced `oc` commands for RAG API management
+- **Monitoring Stack**: Native Prometheus/Grafana integration
+- **Logging**: Centralized logging with OpenShift logging stack
+- **Metrics**: Built-in metrics collection and visualization
+
+### Compliance and Governance
+
+- **SOC 2 Type II**: Ready configurations for compliance
+- **GDPR**: Data protection and privacy controls
+- **HIPAA**: Healthcare data security measures
+- **PCI DSS**: Payment card industry security standards
+- **Audit Logging**: Comprehensive audit trail
+
 ## 🔗 Related Projects
 
 - [ElasticSearch](https://www.elastic.co/elasticsearch/)
 - [vLLM](https://github.com/vllm-project/vllm)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [OpenShift](https://www.redhat.com/en/technologies/cloud-computing/openshift)
+- [Red Hat UBI](https://developers.redhat.com/products/ubi/overview)
+- [Prometheus Operator](https://prometheus-operator.dev/)

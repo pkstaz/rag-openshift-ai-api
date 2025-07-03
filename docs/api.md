@@ -153,7 +153,7 @@ Main RAG endpoint for processing queries and generating responses.
   "query": "string (required)",
   "top_k": "integer (optional, default: 5)",
   "filters": "object (optional)",
-  "model_name": "string (optional, default: microsoft/DialoGPT-medium)"
+  "model_name": "string (optional, default: RedHatAI/granite-3.1-8b-instruct)"
 }
 ```
 
@@ -277,7 +277,7 @@ API information endpoint.
   "description": "RAG agent for OpenShift AI",
   "environment": "production",
   "models": [
-    "microsoft/DialoGPT-medium",
+    "RedHatAI/granite-3.1-8b-instruct",
     "microsoft/DialoGPT-large",
     "gpt2"
   ],
@@ -326,7 +326,7 @@ API information endpoint.
     "model_name": {
       "type": "string",
       "description": "vLLM model to use for generation",
-      "default": "microsoft/DialoGPT-medium",
+      "default": "RedHatAI/granite-3.1-8b-instruct",
       "example": "microsoft/DialoGPT-large"
     }
   },
@@ -387,7 +387,7 @@ API information endpoint.
         "model": {
           "type": "string",
           "description": "Model used for generation",
-          "example": "microsoft/DialoGPT-medium"
+          "example": "RedHatAI/granite-3.1-8b-instruct"
         },
         "latency_ms": {
           "type": "integer",
@@ -487,7 +487,7 @@ curl -X POST http://localhost:8000/api/v1/query \
     }
   ],
   "metadata": {
-    "model": "microsoft/DialoGPT-medium",
+        "model": "RedHatAI/granite-3.1-8b-instruct",
     "latency_ms": 1250,
     "query_time_ms": 150,
     "retrieval_time_ms": 300,
@@ -624,7 +624,7 @@ curl -X POST http://localhost:8000/api/v1/query \
 The API supports various vLLM-compatible models. Check available models using the `/api/v1/info` endpoint.
 
 **Common Models:**
-- `microsoft/DialoGPT-medium` (default)
+- `RedHatAI/granite-3.1-8b-instruct` (default)
 - `microsoft/DialoGPT-large`
 - `gpt2`
 - `gpt2-medium`
@@ -646,7 +646,7 @@ The API supports various vLLM-compatible models. Check available models using th
 ### Best Practices
 
 1. **Model Selection:**
-   - Use `microsoft/DialoGPT-medium` for general queries
+   - Use `RedHatAI/granite-3.1-8b-instruct` for general queries
    - Use `microsoft/DialoGPT-large` for complex reasoning
    - Test different models for your specific use case
 

@@ -1,6 +1,7 @@
 # =============================================================================
 # RAG OpenShift AI API - Helm Values
 # =============================================================================
+# Optimized for OpenShift 4.18+ with enterprise security and compliance
 
 # Image Configuration
 image:
@@ -42,7 +43,7 @@ service:
     #   prometheus.io/port: "8000"
     #   prometheus.io/path: "/api/v1/metrics"
 
-# Route Configuration (OpenShift)
+# Route Configuration (OpenShift 4.18+)
 route:
   enabled: true
   host: ""  # Auto-generated if empty
@@ -52,12 +53,14 @@ route:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
   annotations: {}
-    # Example:
+    # OpenShift 4.18+ specific annotations:
     # annotations:
     #   haproxy.router.openshift.io/timeout: 300s
     #   haproxy.router.openshift.io/rate-limit-connections: "true"
+    #   haproxy.router.openshift.io/balance: roundrobin
+    #   haproxy.router.openshift.io/disable_cookies: "true"
 
-# Resource Management
+# Resource Management (Optimized for OpenShift 4.18+)
 resources:
   requests:
     cpu: 500m
@@ -85,7 +88,7 @@ config:
   # vLLM Configuration
   vllm:
     endpoint: "http://vllm-service:8000"
-    defaultModel: "meta-llama/Llama-2-7b-chat-hf"
+    defaultModel: "RedHatAI/granite-3.1-8b-instruct"
     maxTokens: 2048
     temperature: 0.7
     topP: 0.9
@@ -127,11 +130,14 @@ config:
       ttl: 3600  # 1 hour
       maxSize: 1000
 
-# Health Checks
+# Health Checks (Optimized for OpenShift 4.18+)
 livenessProbe:
   httpGet:
     path: /health
     port: 8000
+    httpHeaders:
+      - name: User-Agent
+        value: "OpenShift-Health-Check"
   initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
@@ -140,8 +146,11 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /health
+    path: /ready
     port: 8000
+    httpHeaders:
+      - name: User-Agent
+        value: "OpenShift-Health-Check"
   initialDelaySeconds: 10
   periodSeconds: 5
   timeoutSeconds: 3
@@ -152,13 +161,16 @@ startupProbe:
   httpGet:
     path: /health
     port: 8000
+    httpHeaders:
+      - name: User-Agent
+        value: "OpenShift-Health-Check"
   initialDelaySeconds: 60
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 30
   successThreshold: 1
 
-# Security Context
+# Security Context (OpenShift 4.18+ Compliant)
 securityContext:
   runAsNonRoot: true
   runAsUser: 1001
@@ -169,6 +181,8 @@ securityContext:
   capabilities:
     drop:
       - ALL
+  seccompProfile:
+    type: RuntimeDefault
 
 podSecurityContext:
   runAsNonRoot: true
@@ -177,19 +191,22 @@ podSecurityContext:
   fsGroup: 1001
   seccompProfile:
     type: RuntimeDefault
+  # OpenShift 4.18+ specific security settings
+  fsGroupChangePolicy: OnRootMismatch
 
-# Service Account
+# Service Account (OpenShift 4.18+ Optimized)
 serviceAccount:
   create: true
   name: ""
   annotations: {}
-  # Example for OpenShift:
+  # OpenShift 4.18+ specific annotations:
   # annotations:
   #   serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"rag-openshift-ai-api"}}'
+  #   serviceaccounts.openshift.io/oauth-redirecturi.1: "https://rag-api-rag-demo.apps.your-cluster.com/oauth/callback"
 
-# Network Policy
+# Network Policy (OpenShift 4.18+ Enhanced)
 networkPolicy:
-  enabled: false
+  enabled: true
   ingressRules:
     - from:
         - namespaceSelector:
@@ -198,95 +215,423 @@ networkPolicy:
         - podSelector:
             matchLabels:
               app: ingress-nginx
-      ports:
-        - protocol: TCP
-          port: 8000
   egressRules:
     - to:
         - namespaceSelector:
             matchLabels:
-              name: elasticsearch
+              name: elasticsearch-namespace
       ports:
         - protocol: TCP
           port: 9200
     - to:
         - namespaceSelector:
             matchLabels:
-              name: vllm
+              name: vllm-namespace
       ports:
         - protocol: TCP
           port: 8000
-    - ports:
-        - protocol: TCP
-          port: 53
+    - to: []  # Allow DNS resolution
+      ports:
         - protocol: UDP
           port: 53
 
-# Horizontal Pod Autoscaler
+# Pod Disruption Budget (OpenShift 4.18+)
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # Alternative: maxUnavailable: 1
+
+# Horizontal Pod Autoscaler (OpenShift 4.18+)
 hpa:
   enabled: true
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-        - type: Percent
-          value: 10
-          periodSeconds: 60
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-        - type: Percent
-          value: 100
-          periodSeconds: 15
+  # OpenShift 4.18+ specific metrics
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
 
-# Monitoring Configuration
-monitoring:
+# Service Monitor (OpenShift 4.18+ Monitoring)
+serviceMonitor:
   enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /api/v1/metrics
+  port: http
+  # OpenShift 4.18+ specific labels
+  additionalLabels:
+    release: prometheus
+
+# ConfigMaps and Secrets
+configMaps:
+  appConfig:
+    enabled: true
+    data:
+      api_config.yaml: |
+        api:
+          host: 0.0.0.0
+          port: 8000
+          debug: false
+          log_level: INFO
+        elasticsearch:
+          url: https://elasticsearch:9200
+          index: rag-documents
+        vllm:
+          url: http://vllm-service:8000
+          model: meta-llama/Llama-2-7b-chat-hf
+
+secrets:
+  elasticsearch:
+    enabled: true
+    secretName: elasticsearch-credentials
+    data:
+      username: elastic
+      password: ""
+  vllm:
+    enabled: false
+    secretName: vllm-credentials
+    data:
+      api_key: ""
+
+# Affinity and Anti-Affinity (OpenShift 4.18+)
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - rag-openshift-ai-api
+        topologyKey: kubernetes.io/hostname
+
+# Node Selector (OpenShift 4.18+)
+nodeSelector: {}
+  # Example for specific node pools:
+  # nodeSelector:
+  #   node-role.kubernetes.io/worker: ""
+  #   node-type: ai-workload
+
+# Tolerations (OpenShift 4.18+)
+tolerations: []
+  # Example for dedicated nodes:
+  # tolerations:
+  # - key: "dedicated"
+  #   operator: "Equal"
+  #   value: "ai-workload"
+  #   effect: "NoSchedule"
+
+# Priority Class (OpenShift 4.18+)
+priorityClassName: ""
+
+# Termination Grace Period (OpenShift 4.18+)
+terminationGracePeriodSeconds: 30
+
+# Lifecycle Hooks (OpenShift 4.18+)
+lifecycle:
+  preStop:
+    exec:
+      command:
+      - /bin/sh
+      - -c
+      - "sleep 10"
+
+# Volume Mounts (OpenShift 4.18+)
+volumeMounts:
+  - name: app-config
+    mountPath: /app/config
+    readOnly: true
+  - name: tmp-volume
+    mountPath: /app/tmp
+  - name: cache-volume
+    mountPath: /app/cache
+
+# Volumes (OpenShift 4.18+)
+volumes:
+  - name: app-config
+    configMap:
+      name: rag-openshift-ai-api-config
+  - name: tmp-volume
+    emptyDir: {}
+  - name: cache-volume
+    emptyDir: {}
+
+# Init Containers (OpenShift 4.18+)
+initContainers: []
+  # Example for dependency checks:
+  # initContainers:
+  # - name: elasticsearch-check
+  #   image: busybox:1.35
+  #   command: ['sh', '-c', 'until nc -z elasticsearch 9200; do echo waiting for elasticsearch; sleep 2; done;']
+  # - name: vllm-check
+  #   image: busybox:1.35
+  #   command: ['sh', '-c', 'until nc -z vllm-service 8000; do echo waiting for vllm; sleep 2; done;']
+
+# Sidecar Containers (OpenShift 4.18+)
+sidecars: []
+  # Example for logging sidecar:
+  # sidecars:
+  # - name: log-aggregator
+  #   image: fluentd:v1.16-1
+  #   volumeMounts:
+  #   - name: varlog
+  #     mountPath: /var/log
+  #   - name: varlibdockercontainers
+  #     mountPath: /var/lib/docker/containers
+  #     readOnly: true
+
+# Pod Annotations (OpenShift 4.18+)
+podAnnotations: {}
+  # Example:
+  # podAnnotations:
+  #   checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+  #   prometheus.io/scrape: "true"
+  #   prometheus.io/port: "8000"
+
+# Deployment Annotations (OpenShift 4.18+)
+deploymentAnnotations: {}
+  # Example:
+  # deploymentAnnotations:
+  #   openshift.io/display-name: "RAG AI API"
+  #   openshift.io/description: "Retrieval-Augmented Generation API for OpenShift"
+
+# Ingress Configuration (Alternative to Route)
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: rag-api.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# RBAC Configuration (OpenShift 4.18+)
+rbac:
+  enabled: true
+  rules: []
+    # Example rules:
+    # rules:
+    # - apiGroups: [""]
+    #   resources: ["pods"]
+    #   verbs: ["get", "list", "watch"]
+    # - apiGroups: [""]
+    #   resources: ["services"]
+    #   verbs: ["get", "list", "watch"]
+
+# Cluster Role Binding (OpenShift 4.18+)
+clusterRoleBinding:
+  enabled: false
+  clusterRole: ""
+  subjects: []
+
+# Pod Security Standards (OpenShift 4.18+)
+podSecurityStandards:
+  enabled: true
+  level: "restricted"
+  version: "v1.24"
+  audit: "restricted"
+  warn: "restricted"
+  enforce: "restricted"
+
+# OpenShift Specific Settings
+openshift:
+  # SCC (Security Context Constraints)
+  scc:
+    enabled: true
+    name: "rag-api-scc"
+    priority: 10
+    runAsUser:
+      type: MustRunAs
+      uid: 1001
+    runAsGroup:
+      type: MustRunAs
+      ranges:
+        - min: 1001
+          max: 1001
+    fsGroup:
+      type: MustRunAs
+      ranges:
+        - min: 1001
+          max: 1001
+    seLinuxContext:
+      type: MustRunAs
+      user: ""
+      role: ""
+      type: ""
+      level: ""
+    supplementalGroups:
+      type: RunAsAny
+    volumes:
+      - "configMap"
+      - "downwardAPI"
+      - "emptyDir"
+      - "persistentVolumeClaim"
+      - "projected"
+      - "secret"
+    allowPrivilegedContainer: false
+    allowHostDirVolumePlugin: false
+    allowHostNetwork: false
+    allowHostPorts: false
+    allowHostPID: false
+    allowHostIPC: false
+    readOnlyRootFilesystem: true
+    requiredDropCapabilities:
+      - "ALL"
+    defaultAddCapabilities: []
+    allowedCapabilities: []
+    allowedUnsafeSysctls: []
+    forbiddenSysctls: []
+    seccompProfiles:
+      - "RuntimeDefault"
+
+  # Build Configuration
+  build:
+    enabled: false
+    strategy: "Docker"
+    source:
+      git:
+        uri: ""
+        ref: "main"
+      contextDir: "."
+    output:
+      to:
+        kind: "ImageStreamTag"
+        name: "rag-openshift-ai-api:latest"
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+
+  # Image Stream
+  imageStream:
+    enabled: false
+    name: "rag-openshift-ai-api"
+    tags:
+      - name: "latest"
+        from:
+          kind: "DockerImage"
+          name: "rag-openshift-ai-api:latest"
+        importPolicy:
+          scheduled: true
+        referencePolicy:
+          type: "Local"
+
+# Monitoring and Observability (OpenShift 4.18+)
+monitoring:
+  # Prometheus Service Monitor
   serviceMonitor:
     enabled: true
     interval: "30s"
+    scrapeTimeout: "10s"
     path: "/api/v1/metrics"
     port: "http"
-    scrapeTimeout: "10s"
     honorLabels: true
-    # Example for additional labels:
-    # additionalLabels:
-    #   release: prometheus
-  podMonitor:
-    enabled: false
+    relabelings: []
+    metricRelabelings: []
+
+  # Grafana Dashboard
   grafanaDashboard:
     enabled: false
-    # dashboard: |
-    #   {
-    #     "dashboard": {
-    #       "title": "RAG API Dashboard"
-    #     }
-    #   }
+    name: "rag-api-dashboard"
+    namespace: "openshift-monitoring"
+    dashboard: |
+      {
+        "dashboard": {
+          "title": "RAG API Dashboard",
+          "panels": []
+        }
+      }
 
-# Logging Configuration
-logging:
-  level: "INFO"
-  format: "json"
-  output: "stdout"
-  # Fluentd configuration
-  fluentd:
+  # Alerting Rules
+  prometheusRule:
     enabled: false
-    # config: |
-    #   <source>
-    #     @type tail
-    #     path /var/log/containers/*.log
-    #     pos_file /var/log/fluentd-containers.log.pos
-    #     tag kubernetes.*
-    #     read_from_head true
-    #     <parse>
-    #       @type json
-    #       time_format %Y-%m-%dT%H:%M:%S.%NZ
-    #     </parse>
-    #   </source>
+    name: "rag-api-alerts"
+    rules: []
+      # Example rules:
+      # rules:
+      # - alert: RAGAPIHighErrorRate
+      #   expr: rate(rag_api_errors_total[5m]) > 0.1
+      #   for: 2m
+      #   labels:
+      #     severity: warning
+      #   annotations:
+      #     summary: "High error rate in RAG API"
+      #     description: "RAG API is experiencing high error rate"
+
+# Backup and Recovery (OpenShift 4.18+)
+backup:
+  enabled: false
+  schedule: "0 2 * * *"
+  retention: "7d"
+  storage:
+    type: "s3"
+    bucket: "rag-api-backups"
+    region: "us-east-1"
+
+# Compliance and Security (OpenShift 4.18+)
+compliance:
+  # Pod Security Standards
+  podSecurityStandards:
+    enabled: true
+    level: "restricted"
+    version: "v1.24"
+
+  # Security Context Constraints
+  scc:
+    enabled: true
+    name: "rag-api-scc"
+
+  # Network Policies
+  networkPolicies:
+    enabled: true
+    ingressRules: []
+    egressRules: []
+
+  # Resource Quotas
+  resourceQuotas:
+    enabled: false
+    hard:
+      requests.cpu: "4"
+      requests.memory: "8Gi"
+      limits.cpu: "8"
+      limits.memory: "16Gi"
+
+  # Limit Ranges
+  limitRanges:
+    enabled: false
+    limits:
+      - type: "Container"
+        default:
+          cpu: "500m"
+          memory: "1Gi"
+        defaultRequest:
+          cpu: "250m"
+          memory: "512Mi"
+        max:
+          cpu: "2000m"
+          memory: "4Gi"
+        min:
+          cpu: "100m"
+          memory: "128Mi"
 
 # Environment Variables
 env:
@@ -358,145 +703,26 @@ env:
   - name: RAG_CACHE_MAX_SIZE
     value: "{{ .Values.config.rag.cache.maxSize }}"
 
-# Secrets (for sensitive data)
-secrets:
-  elasticsearch:
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "json"
+  output: "stdout"
+  # Fluentd configuration
+  fluentd:
     enabled: false
-    # secretName: elasticsearch-credentials
-    # usernameKey: username
-    # passwordKey: password
-  vllm:
-    enabled: false
-    # secretName: vllm-credentials
-    # apiKeyKey: api-key
-
-# ConfigMaps (for non-sensitive configuration)
-configMaps:
-  appConfig:
-    enabled: true
-    # Additional configuration files can be mounted here
-
-# Volumes and Volume Mounts
-volumes: []
-volumeMounts: []
-# Example for persistent storage:
-# volumes:
-#   - name: data-volume
-#     persistentVolumeClaim:
-#       claimName: rag-data-pvc
-# volumeMounts:
-#   - name: data-volume
-#     mountPath: /app/data
-
-# Node Selector
-nodeSelector: {}
-# Example:
-# nodeSelector:
-#   node-role.kubernetes.io/worker: "true"
-
-# Tolerations
-tolerations: []
-# Example:
-# tolerations:
-#   - key: "node-role.kubernetes.io/master"
-#     operator: "Exists"
-#     effect: "NoSchedule"
-
-# Affinity
-affinity: {}
-# Example for pod anti-affinity:
-# affinity:
-#   podAntiAffinity:
-#     preferredDuringSchedulingIgnoredDuringExecution:
-#     - weight: 100
-#       podAffinityTerm:
-#         labelSelector:
-#           matchExpressions:
-#           - key: app.kubernetes.io/name
-#             operator: In
-#             values:
-#             - rag-openshift-ai-api
-#         topologyKey: kubernetes.io/hostname
-
-# Annotations for the deployment
-deploymentAnnotations: {}
-# Example:
-# deploymentAnnotations:
-#   fluxcd.io/automated: "true"
-#   fluxcd.io/tag.rag-api: glob:main-*
-
-# Labels for the deployment
-deploymentLabels: {}
-# Example:
-# deploymentLabels:
-#   app.kubernetes.io/component: api
-#   app.kubernetes.io/part-of: rag-system
-
-# Ingress (alternative to Route for Kubernetes)
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-
-# Pod Disruption Budget
-pdb:
-  enabled: true
-  minAvailable: 1
-  # Alternative: maxUnavailable: 1
-
-# Priority Class
-priorityClassName: ""
-# Example: "high-priority"
-
-# Termination Grace Period
-terminationGracePeriodSeconds: 30
-
-# Image Pull Secrets
-imagePullSecrets: []
-# Example:
-# imagePullSecrets:
-#   - name: registry-secret
-
-# Init Containers
-initContainers: []
-# Example:
-# initContainers:
-#   - name: init-config
-#     image: busybox:1.35
-#     command: ['sh', '-c', 'echo "Initializing..."']
-#     volumeMounts:
-#       - name: config-volume
-#         mountPath: /config
-
-# Sidecar Containers
-sidecarContainers: []
-# Example:
-# sidecarContainers:
-#   - name: sidecar
-#     image: nginx:alpine
-#     ports:
-#       - containerPort: 80
-
-# Lifecycle Hooks
-lifecycle:
-  preStop:
-    exec:
-      command:
-        - /bin/sh
-        - -c
-        - "sleep 10"
-  postStart:
-    exec:
-      command:
-        - /bin/sh
-        - -c
-        - "echo 'Container started'"
+    # config: |
+    #   <source>
+    #     @type tail
+    #     path /var/log/containers/*.log
+    #     pos_file /var/log/fluentd-containers.log.pos
+    #     tag kubernetes.*
+    #     read_from_head true
+    #     <parse>
+    #       @type json
+    #       time_format %Y-%m-%dT%H:%M:%S.%NZ
+    #     </parse>
+    #   </source>
 
 # Pod Template Annotations
 podTemplateAnnotations: {}

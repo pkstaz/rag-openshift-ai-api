@@ -1,386 +1,708 @@
-apiVersion: template.openshift.io/v1
-kind: Template
+# =============================================================================
+# RAG OpenShift AI API - OpenShift 4.18+ Deployment
+# =============================================================================
+# Complete deployment configuration optimized for OpenShift 4.18+
+# Includes Security Context Constraints, Network Policies, and Monitoring
+
+# =============================================================================
+# 1. Security Context Constraints (SCC)
+# =============================================================================
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
 metadata:
-  name: rag-openshift-ai-api
+  name: rag-api-scc
   annotations:
-    description: "RAG OpenShift AI API - Retrieval-Augmented Generation API"
-    tags: "rag,ai,api,openshift"
-    iconClass: "icon-python"
-    openshift.io/display-name: "RAG OpenShift AI API"
-    openshift.io/documentation-url: "https://github.com/your-repo/rag-openshift-ai-api"
-    openshift.io/support-url: "https://github.com/your-repo/rag-openshift-ai-api/issues"
+    kubernetes.io/description: "Security Context Constraints for RAG API"
+spec:
+  allowHostDirVolumePlugin: false
+  allowHostIPC: false
+  allowHostNetwork: false
+  allowHostPID: false
+  allowHostPorts: false
+  allowPrivilegeEscalation: false
+  allowPrivilegedContainer: false
+  allowedCapabilities: []
+  allowedUnsafeSysctls: []
+  defaultAddCapabilities: []
+  forbiddenSysctls: []
+  fsGroup:
+    type: MustRunAs
+    ranges:
+      - min: 1001
+        max: 1001
+  priority: 10
+  readOnlyRootFilesystem: true
+  requiredDropCapabilities:
+    - ALL
+  runAsGroup:
+    type: MustRunAs
+    ranges:
+      - min: 1001
+        max: 1001
+  runAsUser:
+    type: MustRunAs
+    uid: 1001
+  seccompProfiles:
+    - RuntimeDefault
+  seLinuxContext:
+    type: MustRunAs
+    user: ""
+    role: ""
+    type: ""
+    level: ""
+  supplementalGroups:
+    type: RunAsAny
+  users:
+    - system:serviceaccount:rag-demo:rag-api-sa
+  volumes:
+    - configMap
+    - downwardAPI
+    - emptyDir
+    - persistentVolumeClaim
+    - projected
+    - secret
 
-parameters:
-- name: APPLICATION_NAME
-  displayName: "Application Name"
-  description: "Name of the RAG API application"
-  value: "rag-api"
-  required: true
-
-- name: NAMESPACE
-  displayName: "Namespace"
-  description: "Target namespace for deployment"
-  value: "rag-project"
-  required: true
-
-- name: IMAGE_TAG
-  displayName: "Image Tag"
-  description: "Docker image tag to deploy"
-  value: "latest"
-  required: true
-
-- name: REPLICAS
-  displayName: "Number of Replicas"
-  description: "Number of replicas to run"
-  value: "2"
-  required: true
-
-- name: CPU_REQUEST
-  displayName: "CPU Request"
-  description: "CPU request for each pod"
-  value: "500m"
-  required: true
-
-- name: CPU_LIMIT
-  displayName: "CPU Limit"
-  description: "CPU limit for each pod"
-  value: "2000m"
-  required: true
-
-- name: MEMORY_REQUEST
-  displayName: "Memory Request"
-  description: "Memory request for each pod"
-  value: "1Gi"
-  required: true
-
-- name: MEMORY_LIMIT
-  displayName: "Memory Limit"
-  description: "Memory limit for each pod"
-  value: "4Gi"
-  required: true
-
-- name: ELASTICSEARCH_URL
-  displayName: "ElasticSearch URL"
-  description: "ElasticSearch server URL"
-  value: "http://elasticsearch:9200"
-  required: true
-
-- name: VLLM_URL
-  displayName: "vLLM URL"
-  description: "vLLM server URL"
-  value: "http://vllm-server:8001"
-  required: true
-
-- name: LOG_LEVEL
-  displayName: "Log Level"
-  description: "Application log level"
-  value: "INFO"
-  required: true
-
-objects:
+---
 # =============================================================================
-# ImageStream
+# 2. Service Account
 # =============================================================================
-- apiVersion: image.openshift.io/v1
-  kind: ImageStream
-  metadata:
-    name: ${APPLICATION_NAME}
-    namespace: ${NAMESPACE}
-    labels:
-      app: ${APPLICATION_NAME}
-      component: api
-  spec:
-    lookupPolicy:
-      local: true
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rag-api-sa
+  namespace: rag-demo
+  annotations:
+    serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"rag-api"}}'
 
+---
 # =============================================================================
-# BuildConfig
+# 3. ConfigMap for Application Configuration
 # =============================================================================
-- apiVersion: build.openshift.io/v1
-  kind: BuildConfig
-  metadata:
-    name: ${APPLICATION_NAME}
-    namespace: ${NAMESPACE}
-    labels:
-      app: ${APPLICATION_NAME}
-      component: api
-  spec:
-    output:
-      to:
-        kind: ImageStreamTag
-        name: ${APPLICATION_NAME}:${IMAGE_TAG}
-    source:
-      git:
-        uri: https://github.com/your-repo/rag-openshift-ai-api.git
-        ref: main
-      contextDir: .
-    strategy:
-      type: Docker
-      dockerStrategy:
-        dockerfilePath: Containerfile
-        env:
-        - name: BUILDKIT_INLINE_CACHE
-          value: "1"
-    triggers:
-    - type: ConfigChange
-    - type: ImageChange
-    resources:
-      limits:
-        cpu: "2"
-        memory: "4Gi"
-      requests:
-        cpu: "500m"
-        memory: "1Gi"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-api-config
+  namespace: rag-demo
+  labels:
+    app: rag-api
+data:
+  api_config.yaml: |
+    api:
+      host: 0.0.0.0
+      port: 8000
+      debug: false
+      log_level: INFO
+      cors_origins: ["*"]
+      max_request_size: "10MB"
+      request_timeout: 300
+      rate_limit:
+        enabled: true
+        requests_per_minute: 60
+        burst_size: 10
+    
+    elasticsearch:
+      url: https://elasticsearch:9200
+      index: rag-documents
+      ssl_verify: true
+      timeout: 30
+      max_retries: 3
+      max_connections: 20
+      retry_on_timeout: true
+    
+    vllm:
+      url: http://vllm-service:8000
+      model: RedHatAI/granite-3.1-8b-instruct
+      max_tokens: 2048
+      temperature: 0.7
+      top_p: 0.9
+      timeout: 60
+    
+    rag:
+      retrieval:
+        top_k: 5
+        similarity_threshold: 0.7
+        max_tokens: 4000
+        search_type: hybrid
+      generation:
+        max_tokens: 2048
+        temperature: 0.7
+        top_p: 0.9
+        top_k: 50
+        repetition_penalty: 1.1
+      cache:
+        enabled: true
+        ttl: 3600
+        max_size: 1000
 
+---
 # =============================================================================
-# DeploymentConfig
+# 4. Secret for Sensitive Data
 # =============================================================================
-- apiVersion: apps.openshift.io/v1
-  kind: DeploymentConfig
-  metadata:
-    name: ${APPLICATION_NAME}
-    namespace: ${NAMESPACE}
-    labels:
-      app: ${APPLICATION_NAME}
-      component: api
-  spec:
-    replicas: ${REPLICAS}
-    selector:
-      app: ${APPLICATION_NAME}
-      component: api
-    template:
-      metadata:
-        labels:
-          app: ${APPLICATION_NAME}
-          component: api
-      spec:
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rag-api-secret
+  namespace: rag-demo
+  labels:
+    app: rag-api
+type: Opaque
+data:
+  # Base64 encoded values - replace with actual values
+  es_username: ZWxhc3RpYw==  # elastic
+  es_password: eW91ci1wYXNzd29yZA==  # your-password
+  secret_key: eW91ci1zZWNyZXQta2V5LWNoYW5nZS1pbi1wcm9kdWN0aW9u  # your-secret-key-change-in-production
+
+---
+# =============================================================================
+# 5. Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-api
+  namespace: rag-demo
+  labels:
+    app: rag-api
+    app.kubernetes.io/name: rag-api
+    app.kubernetes.io/version: "1.0.0"
+  annotations:
+    openshift.io/display-name: "RAG AI API"
+    openshift.io/description: "Retrieval-Augmented Generation API for OpenShift"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  selector:
+    matchLabels:
+      app: rag-api
+  
+  template:
+    metadata:
+      labels:
+        app: rag-api
+        app.kubernetes.io/name: rag-api
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/api/v1/metrics"
+        checksum/config: "{{ include (print $.Template.BasePath \"/configmap.yaml\") . | sha256sum }}"
+    
+    spec:
+      serviceAccountName: rag-api-sa
+      terminationGracePeriodSeconds: 30
+      
+      # Pod Security Context (OpenShift 4.18+)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Affinity for High Availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - rag-api
+              topologyKey: kubernetes.io/hostname
+      
+      # Init Containers for Dependency Checks
+      initContainers:
+      - name: elasticsearch-check
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z elasticsearch 9200; do echo waiting for elasticsearch; sleep 2; done;']
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      
+      - name: vllm-check
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z vllm-service 8000; do echo waiting for vllm; sleep 2; done;']
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      
+      # Volumes
+      volumes:
+      - name: app-config
+        configMap:
+          name: rag-api-config
+      - name: tmp-volume
+        emptyDir: {}
+      - name: cache-volume
+        emptyDir: {}
+      - name: uploads-volume
+        emptyDir: {}
+      
+      # Main Container
+      containers:
+      - name: rag-api
+        image: rag-api:latest
+        imagePullPolicy: Always
+        
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        
+        # Security Context
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
-          fsGroup: 1001
+          runAsGroup: 1001
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
               - ALL
-        containers:
-        - name: ${APPLICATION_NAME}
-          image: ${APPLICATION_NAME}:${IMAGE_TAG}
-          ports:
-          - containerPort: 8000
-            name: http
-            protocol: TCP
-          env:
-          - name: API_HOST
-            value: "0.0.0.0"
-          - name: API_PORT
-            value: "8000"
-          - name: API_VERSION
-            value: "0.1.0"
-          - name: ELASTICSEARCH_URL
-            value: "${ELASTICSEARCH_URL}"
-          - name: VLLM_URL
-            value: "${VLLM_URL}"
-          - name: LOG_LEVEL
-            value: "${LOG_LEVEL}"
-          - name: ENVIRONMENT
-            value: "production"
-          resources:
-            limits:
-              cpu: ${CPU_LIMIT}
-              memory: ${MEMORY_LIMIT}
-            requests:
-              cpu: ${CPU_REQUEST}
-              memory: ${MEMORY_REQUEST}
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: 8000
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          startupProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 30
-        terminationGracePeriodSeconds: 60
-
-# =============================================================================
-# Service
-# =============================================================================
-- apiVersion: v1
-  kind: Service
-  metadata:
-    name: ${APPLICATION_NAME}
-    namespace: ${NAMESPACE}
-    labels:
-      app: ${APPLICATION_NAME}
-      component: api
-  spec:
-    ports:
-    - name: http
-      port: 8000
-      targetPort: 8000
-      protocol: TCP
-    selector:
-      app: ${APPLICATION_NAME}
-      component: api
-    type: ClusterIP
-
-# =============================================================================
-# Route
-# =============================================================================
-- apiVersion: route.openshift.io/v1
-  kind: Route
-  metadata:
-    name: ${APPLICATION_NAME}
-    namespace: ${NAMESPACE}
-    labels:
-      app: ${APPLICATION_NAME}
-      component: api
-    annotations:
-      openshift.io/host.generated: "true"
-  spec:
-    host: ${APPLICATION_NAME}-${NAMESPACE}.apps.${CLUSTER_DOMAIN}
-    port:
-      targetPort: http
-    to:
-      kind: Service
-      name: ${APPLICATION_NAME}
-      weight: 100
-    tls:
-      termination: edge
-      insecureEdgeTerminationPolicy: Redirect
-
-# =============================================================================
-# HorizontalPodAutoscaler
-# =============================================================================
-- apiVersion: autoscaling/v2
-  kind: HorizontalPodAutoscaler
-  metadata:
-    name: ${APPLICATION_NAME}
-    namespace: ${NAMESPACE}
-    labels:
-      app: ${APPLICATION_NAME}
-      component: api
-  spec:
-    scaleTargetRef:
-      apiVersion: apps.openshift.io/v1
-      kind: DeploymentConfig
-      name: ${APPLICATION_NAME}
-    minReplicas: 2
-    maxReplicas: 10
-    metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
-
-# =============================================================================
-# ConfigMap for Application Settings
-# =============================================================================
-- apiVersion: v1
-  kind: ConfigMap
-  metadata:
-    name: ${APPLICATION_NAME}-config
-    namespace: ${NAMESPACE}
-    labels:
-      app: ${APPLICATION_NAME}
-      component: config
-  data:
-    api.yaml: |
-      host: "0.0.0.0"
-      port: 8000
-      version: "0.1.0"
-      docs_enabled: "true"
-      cors_enabled: "true"
-      cors_origins: "['*']"
-    
-    logging.yaml: |
-      level: "${LOG_LEVEL}"
-      format: "json"
-      output: "stdout"
-    
-    metrics.yaml: |
-      enabled: "true"
-      host: "0.0.0.0"
-      port: 9090
-
-# =============================================================================
-# ServiceAccount
-# =============================================================================
-- apiVersion: v1
-  kind: ServiceAccount
-  metadata:
-    name: ${APPLICATION_NAME}
-    namespace: ${NAMESPACE}
-    labels:
-      app: ${APPLICATION_NAME}
-      component: api
-
-# =============================================================================
-# NetworkPolicy
-# =============================================================================
-- apiVersion: networking.k8s.io/v1
-  kind: NetworkPolicy
-  metadata:
-    name: ${APPLICATION_NAME}-network-policy
-    namespace: ${NAMESPACE}
-    labels:
-      app: ${APPLICATION_NAME}
-      component: network
-  spec:
-    podSelector:
-      matchLabels:
-        app: ${APPLICATION_NAME}
-    policyTypes:
-      - Ingress
-      - Egress
-    ingress:
-      - from:
-          - namespaceSelector:
-              matchLabels:
-                name: frontend
-        ports:
-          - protocol: TCP
+          seccompProfile:
+            type: RuntimeDefault
+        
+        # Resource Limits
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        
+        # Health Checks
+        livenessProbe:
+          httpGet:
+            path: /health
             port: 8000
-    egress:
-      - to:
-          - namespaceSelector:
-              matchLabels:
-                name: elasticsearch
-        ports:
-          - protocol: TCP
-            port: 9200
-      - to:
-          - namespaceSelector:
-              matchLabels:
-                name: vllm
-        ports:
-          - protocol: TCP
-            port: 8001
-      - ports:
-          - protocol: TCP
-            port: 53
-          - protocol: UDP
-            port: 53 
+            httpHeaders:
+            - name: User-Agent
+              value: "OpenShift-Health-Check"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+            httpHeaders:
+            - name: User-Agent
+              value: "OpenShift-Health-Check"
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            httpHeaders:
+            - name: User-Agent
+              value: "OpenShift-Health-Check"
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+          successThreshold: 1
+        
+        # Lifecycle Hooks
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - "sleep 10"
+        
+        # Volume Mounts
+        volumeMounts:
+        - name: app-config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp-volume
+          mountPath: /app/tmp
+        - name: cache-volume
+          mountPath: /app/cache
+        - name: uploads-volume
+          mountPath: /app/uploads
+        
+        # Environment Variables
+        env:
+        # API Configuration
+        - name: API_HOST
+          value: "0.0.0.0"
+        - name: API_PORT
+          value: "8000"
+        - name: API_DEBUG
+          value: "false"
+        - name: API_LOG_LEVEL
+          value: "INFO"
+        - name: API_CORS_ORIGINS
+          value: "*"
+        - name: API_MAX_REQUEST_SIZE
+          value: "10MB"
+        - name: API_REQUEST_TIMEOUT
+          value: "300"
+        
+        # ElasticSearch Configuration
+        - name: ES_URL
+          value: "https://elasticsearch:9200"
+        - name: ES_INDEX_NAME
+          value: "rag_documents"
+        - name: ES_TIMEOUT
+          value: "30"
+        - name: ES_VECTOR_DIMENSION
+          value: "384"
+        - name: ES_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: rag-api-secret
+              key: es_username
+        - name: ES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rag-api-secret
+              key: es_password
+        
+        # vLLM Configuration
+        - name: VLLM_URL
+          value: "http://vllm-service:8000"
+        - name: VLLM_MODEL_NAME
+          value: "RedHatAI/granite-3.1-8b-instruct"
+        - name: VLLM_TIMEOUT
+          value: "60"
+        - name: VLLM_TEMPERATURE
+          value: "0.7"
+        - name: VLLM_MAX_TOKENS
+          value: "2048"
+        
+        # Embedding Configuration
+        - name: EMBEDDING_MODEL_NAME
+          value: "sentence-transformers/all-MiniLM-L6-v2"
+        - name: EMBEDDING_DEVICE
+          value: "cpu"
+        - name: EMBEDDING_BATCH_SIZE
+          value: "32"
+        
+        # RAG Configuration
+        - name: RAG_TOP_K
+          value: "5"
+        - name: RAG_SIMILARITY_THRESHOLD
+          value: "0.7"
+        - name: RAG_SEARCH_TYPE
+          value: "hybrid"
+        - name: RAG_CHUNK_SIZE
+          value: "1000"
+        - name: RAG_CHUNK_OVERLAP
+          value: "200"
+        
+        # Environment Configuration
+        - name: ENV_ENVIRONMENT
+          value: "production"
+        - name: ENV_METRICS_ENABLED
+          value: "true"
+        - name: ENV_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rag-api-secret
+              key: secret_key
+
+---
+# =============================================================================
+# 6. Service
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-api
+  namespace: rag-demo
+  labels:
+    app: rag-api
+    app.kubernetes.io/name: rag-api
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/api/v1/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app: rag-api
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+
+---
+# =============================================================================
+# 7. Route (OpenShift)
+# =============================================================================
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: rag-api
+  namespace: rag-demo
+  labels:
+    app: rag-api
+    app.kubernetes.io/name: rag-api
+  annotations:
+    haproxy.router.openshift.io/timeout: 300s
+    haproxy.router.openshift.io/rate-limit-connections: "true"
+    haproxy.router.openshift.io/balance: roundrobin
+    haproxy.router.openshift.io/disable_cookies: "true"
+spec:
+  host: rag-api-rag-demo.apps.your-cluster.com
+  to:
+    kind: Service
+    name: rag-api
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+---
+# =============================================================================
+# 8. Horizontal Pod Autoscaler
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rag-api-hpa
+  namespace: rag-demo
+  labels:
+    app: rag-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rag-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+
+---
+# =============================================================================
+# 9. Pod Disruption Budget
+# =============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rag-api-pdb
+  namespace: rag-demo
+  labels:
+    app: rag-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: rag-api
+
+---
+# =============================================================================
+# 10. Network Policy
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-api-network-policy
+  namespace: rag-demo
+  labels:
+    app: rag-api
+spec:
+  podSelector:
+    matchLabels:
+      app: rag-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: allowed-namespace
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: elasticsearch-namespace
+    ports:
+    - protocol: TCP
+      port: 9200
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: vllm-namespace
+    ports:
+    - protocol: TCP
+      port: 8000
+  - to: []  # Allow DNS resolution
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+# =============================================================================
+# 11. Service Monitor (Prometheus)
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rag-api-monitor
+  namespace: rag-demo
+  labels:
+    app: rag-api
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: rag-api
+  endpoints:
+  - port: http
+    path: /api/v1/metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    honorLabels: true
+
+---
+# =============================================================================
+# 12. Prometheus Rule (Alerts)
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rag-api-alerts
+  namespace: rag-demo
+  labels:
+    app: rag-api
+    release: prometheus
+spec:
+  groups:
+  - name: rag-api.rules
+    rules:
+    - alert: RAGAPIHighErrorRate
+      expr: rate(rag_api_errors_total[5m]) > 0.1
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High error rate in RAG API"
+        description: "RAG API is experiencing high error rate"
+    
+    - alert: RAGAPIHighLatency
+      expr: histogram_quantile(0.95, rate(rag_api_request_duration_seconds_bucket[5m])) > 5
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High latency in RAG API"
+        description: "RAG API is experiencing high latency"
+    
+    - alert: RAGAPIDown
+      expr: up{app="rag-api"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "RAG API is down"
+        description: "RAG API service is not responding"
+
+---
+# =============================================================================
+# 13. Resource Quota
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: rag-api-quota
+  namespace: rag-demo
+  labels:
+    app: rag-api
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: "8Gi"
+    limits.cpu: "8"
+    limits.memory: "16Gi"
+    pods: "10"
+
+---
+# =============================================================================
+# 14. Limit Range
+# =============================================================================
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: rag-api-limits
+  namespace: rag-demo
+  labels:
+    app: rag-api
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: "500m"
+      memory: "1Gi"
+    defaultRequest:
+      cpu: "250m"
+      memory: "512Mi"
+    max:
+      cpu: "2000m"
+      memory: "4Gi"
+    min:
+      cpu: "100m"
+      memory: "128Mi" 
