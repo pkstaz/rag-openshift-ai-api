@@ -86,7 +86,7 @@ config:
     url: "https://your-elasticsearch:9200"
     index: "rag-documents"
     username: "elastic"
-    password: "your-password"
+    password: "<your-elasticsearch-password>"
   
   vllm:
     endpoint: "http://your-vllm-service:8000"
@@ -135,7 +135,7 @@ config:
     url: "https://elasticsearch-cluster:9200"
     index: "rag-documents"
     username: "elastic"
-    password: "your-secure-password"
+    password: "<your-elasticsearch-password>"
     sslVerify: true
     timeout: 30
     maxRetries: 3
@@ -324,7 +324,7 @@ helm install rag-api ./helm \
 oc create secret docker-registry your-registry-secret \
   --docker-server=your-registry.com \
   --docker-username=your-username \
-  --docker-password=your-password
+  --docker-password=<your-registry-password>
 
 # Install with registry secret
 helm install rag-api ./helm \
@@ -548,7 +548,7 @@ config:
   elasticsearch:
     url: "https://elasticsearch-prod:9200"
     username: "elastic"
-    password: "prod-password"
+    password: "<your-production-elasticsearch-password>"
   
   vllm:
     endpoint: "http://vllm-prod:8000"

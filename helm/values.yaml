@@ -6,7 +6,7 @@
 # Image configuration
 image:
   repository: quay.io/cestayg/rag-openshift-ai-api
-  tag: "dev-16"
+  tag: "latest"
   pullPolicy: "Always"
 
 # Application configuration
@@ -49,7 +49,7 @@ elasticsearch:
   url: "https://elasticsearch-es-default:9200"
   indexName: "rag-documents"
   username: "elastic"
-  password: "25im5Ru59a1V1qAIRg9gc02A"
+  password: "<your-elasticsearch-password>"
   timeout: 30
   vectorDimension: 384
 

@@ -149,8 +149,8 @@ type: Opaque
 data:
   # Base64 encoded values - replace with actual values
   es_username: ZWxhc3RpYw==  # elastic
-  es_password: eW91ci1wYXNzd29yZA==  # your-password
-  secret_key: eW91ci1zZWNyZXQta2V5LWNoYW5nZS1pbi1wcm9kdWN0aW9u  # your-secret-key-change-in-production
+  es_password: <your-elasticsearch-password-base64>  # your-elasticsearch-password
+  secret_key: <your-secret-key-base64>  # your-secret-key-change-in-production
 
 ---
 # =============================================================================

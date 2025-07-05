@@ -140,7 +140,7 @@ API_LOG_LEVEL=INFO
 ES_URL=https://localhost:9200
 ES_INDEX_NAME=rag_documents
 ES_USERNAME=elastic
-ES_PASSWORD=your-password
+ES_PASSWORD=<your-elasticsearch-password>
 ES_TIMEOUT=30
 ES_VECTOR_DIMENSION=384
 
@@ -252,7 +252,7 @@ image:
 elasticsearch:
   url: "https://your-elasticsearch:9200"
   username: "elastic"
-  password: "your-password"
+  password: "<your-elasticsearch-password>"
 
 # vLLM configuration
 vllm:
@@ -299,7 +299,7 @@ helm status rag-api -n rag-openshift-ai
 # Download from: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/
 
 # Login to OpenShift
-oc login --token=<your-token> --server=<your-server>
+oc login --token=<your-openshift-token> --server=<your-openshift-server>
 ```
 
 #### Quick Deployment
