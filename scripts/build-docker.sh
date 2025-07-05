@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 
 # Default values
 IMAGE_NAME="rag-openshift-ai-api"
-IMAGE_TAG="dev-16"
+IMAGE_TAG="1.0.0"
 BUILD_ENGINE="podman"
 BUILD_FILE="Containerfile"
 PLATFORM="linux/amd64"
