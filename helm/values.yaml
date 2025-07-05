@@ -6,7 +6,7 @@
 # Image configuration
 image:
   repository: quay.io/cestayg/rag-openshift-ai-api
-  tag: "latest"
+  tag: "dev-16"
   pullPolicy: "Always"
 
 # Application configuration
@@ -55,7 +55,7 @@ elasticsearch:
 
 # vLLM configuration
 vllm:
-  endpoint: "http://granite-3-1-8b-instruct-predictor.rag-openshift-ai.svc.cluster.local:8080"
+  endpoint: "http://granite-3-1-8b-instruct-predictor:8080"
   defaultModel: "granite-3-1-8b-instruct"
   timeout: 60
   temperature: 0.7
