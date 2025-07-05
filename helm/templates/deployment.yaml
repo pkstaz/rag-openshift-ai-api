@@ -44,10 +44,6 @@ spec:
         {{- end }}
       {{- end }}
       
-      {{- if .Values.serviceAccount.create }}
-      serviceAccountName: {{ include "rag-openshift-ai-api.serviceAccountName" . }}
-      {{- end }}
-      
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
@@ -109,13 +105,6 @@ spec:
         {{- toYaml .Values.volumes | nindent 8 }}
       {{- end }}
       
-      {{- if .Values.configMaps.appConfig.enabled }}
-      volumes:
-        - name: app-config
-          configMap:
-            name: {{ include "rag-openshift-ai-api.fullname" . }}-config
-      {{- end }}
-      
       {{- if .Values.secrets.elasticsearch.enabled }}
       volumes:
         - name: elasticsearch-secrets
@@ -147,15 +136,24 @@ spec:
         
         {{- if .Values.resources }}
         resources:
-          {{- toYaml . | nindent 10 }}
+          {{- toYaml .Values.resources | nindent 10 }}
         {{- end }}
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.app.port }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12
         
         livenessProbe:
           httpGet:
             path: /health
             port: {{ .Values.app.port }}
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          initialDelaySeconds: 60
+          periodSeconds: 15
           timeoutSeconds: 5
           failureThreshold: 3
         
@@ -163,9 +161,9 @@ spec:
           httpGet:
             path: /ready
             port: {{ .Values.app.port }}
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
           failureThreshold: 3
         
         env:
@@ -179,9 +177,9 @@ spec:
         - name: API_LOG_LEVEL
           value: {{ .Values.api.logLevel | quote }}
         - name: API_CORS_ORIGINS
-          value: {{ .Values.api.corsOrigins | join "," | quote }}
+          value: {{ .Values.api.corsOrigins | toJson | quote }}
         - name: API_CORS_METHODS
-          value: {{ .Values.api.corsMethods | join "," | quote }}
+          value: {{ .Values.api.corsMethods | toJson | quote }}
         
         # Elasticsearch Configuration
         - name: ES_URL
@@ -266,13 +264,6 @@ spec:
         {{- if .Values.volumeMounts }}
         volumeMounts:
           {{- toYaml .Values.volumeMounts | nindent 10 }}
-        {{- end }}
-        
-        {{- if .Values.configMaps.appConfig.enabled }}
-        volumeMounts:
-          - name: app-config
-            mountPath: /app/config
-            readOnly: true
         {{- end }}
         
         {{- if .Values.secrets.elasticsearch.enabled }}

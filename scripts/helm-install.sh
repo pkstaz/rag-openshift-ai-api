@@ -16,13 +16,13 @@ NC='\033[0m' # No Color
 
 # Default values
 NAMESPACE="rag-openshift-ai"
-RELEASE_NAME="rag-api"
+RELEASE_NAME="rag-openshift-ai-api"
 VALUES_FILE="helm/values.yaml"
 DRY_RUN=false
-WAIT_FOR_READY=true
+WAIT_FOR_READY=false
 PORT_FORWARD=false
 TAIL_LOGS=false
-ROLLBACK_ON_FAILURE=true
+ROLLBACK_ON_FAILURE=false
 
 # Function to print colored output
 print_info() {

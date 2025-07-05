@@ -45,7 +45,7 @@ Usage: $0 [OPTIONS]
 
 Options:
     -n, --name NAME         Build name (default: rag-api)
-    -f, --file FILE        Build file: Containerfile, Dockerfile (default: Containerfile)
+    -f, --file FILE        Build file: Containerfile (default: Containerfile)
     -p, --namespace NS     Namespace (default: rag-openshift-ai)
     --no-follow            Don't follow build logs
     -d, --dry-run          Show commands without executing
@@ -53,14 +53,10 @@ Options:
 
 Build Files:
     Containerfile          - Primary build file (recommended)
-    Dockerfile             - Compatibility build file
 
 Examples:
     # Build with Containerfile (recommended)
     $0 -f Containerfile
-
-    # Build with Dockerfile
-    $0 -f Dockerfile
 
     # Build in different namespace
     $0 -p my-namespace -f Containerfile
@@ -111,9 +107,7 @@ create_build_config() {
     local build_cmd="oc new-build --strategy=docker --binary --name=$BUILD_NAME"
     
     # Add dockerfile if specified
-    if [ "$BUILD_FILE" = "Containerfile" ]; then
-        build_cmd="$build_cmd --dockerfile=Containerfile"
-    fi
+    build_cmd="$build_cmd --dockerfile=Containerfile"
     
     # Add namespace
     build_cmd="$build_cmd -n $NAMESPACE"

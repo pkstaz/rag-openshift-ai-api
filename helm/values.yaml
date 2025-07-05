@@ -5,15 +5,24 @@
 
 # Image configuration
 image:
-  repository: rag-openshift-ai-api
-  tag: "latest"
+  repository: quay.io/cestayg/rag-openshift-ai-api
+  tag: "dev-16"
   pullPolicy: "Always"
 
 # Application configuration
 app:
-  name: "rag-api"
+  name: "rag-openshift-ai-api"
   port: 8000
-  replicas: 2
+  replicas: 1
+
+# Deployment optimization
+terminationGracePeriodSeconds: 30
+revisionHistoryLimit: 3
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
 
 # Service configuration
 service:
@@ -29,25 +38,25 @@ route:
 # Resource configuration
 resources:
   requests:
-    cpu: "500m"
-    memory: "1Gi"
+    cpu: "400m"
+    memory: "768Mi"
   limits:
-    cpu: "2000m"
-    memory: "4Gi"
+    cpu: "1500m"
+    memory: "3Gi"
 
 # Elasticsearch configuration
 elasticsearch:
-  url: "https://elasticsearch:9200"
-  indexName: "rag_documents"
+  url: "https://elasticsearch-es-default:9200"
+  indexName: "rag-documents"
   username: "elastic"
-  password: "changeme"
+  password: "25im5Ru59a1V1qAIRg9gc02A"
   timeout: 30
   vectorDimension: 384
 
 # vLLM configuration
 vllm:
-  endpoint: "http://vllm-server:8001"
-  defaultModel: "RedHatAI/granite-3.1-8b-instruct"
+  endpoint: "http://granite-3-1-8b-instruct-predictor.rag-openshift-ai.svc.cluster.local:8080"
+  defaultModel: "granite-3-1-8b-instruct"
   timeout: 60
   temperature: 0.7
   maxTokens: 512
@@ -68,8 +77,8 @@ rag:
 
 # API configuration
 api:
-  debug: false
-  logLevel: "INFO"
+  debug: true
+  logLevel: "DEBUG"
   corsOrigins: ["*"]
   corsMethods: ["GET", "POST", "PUT", "DELETE"]
 
@@ -85,16 +94,17 @@ monitoring:
 # Security configuration
 security:
   runAsNonRoot: true
-  runAsUser: 1001
-  fsGroup: 1001
   allowPrivilegeEscalation: false
   capabilities:
     drop:
       - ALL
 
+# Pod Security Context
+podSecurityContext:
+
 # Network policy
 networkPolicy:
-  enabled: true
+  enabled: false
   ingress:
     - from:
         - namespaceSelector:
@@ -107,20 +117,15 @@ networkPolicy:
 # Horizontal Pod Autoscaler
 hpa:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
+  minReplicas: 1
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 75
   targetMemoryUtilizationPercentage: 80
 
 # Pod Disruption Budget
 pdb:
   enabled: true
   minAvailable: 1
-
-# Service Account
-serviceAccount:
-  create: true
-  name: "rag-api-sa"
 
 # ConfigMap and Secret
 configMap:
@@ -129,4 +134,18 @@ configMap:
 
 secret:
   create: true
-  name: "rag-api-secrets" 
+  name: "rag-api-secrets"
+
+secretKey: "your-secret-key"
+
+secrets:
+  elasticsearch:
+    enabled: false
+    secretName: ""
+  vllm:
+    enabled: false
+    secretName: ""
+
+logging:
+  fluentd:
+    enabled: false 

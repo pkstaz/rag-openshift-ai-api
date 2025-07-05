@@ -5,116 +5,16 @@ metadata:
   name: {{ include "rag-openshift-ai-api.fullname" . }}
   labels:
     {{- include "rag-openshift-ai-api.labels" . | nindent 4 }}
-    {{- with .Values.monitoring.serviceMonitor.additionalLabels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-    # Prometheus operator labels
-    {{- if .Values.monitoring.serviceMonitor.release }}
-    release: {{ .Values.monitoring.serviceMonitor.release }}
-    {{- end }}
-    {{- if .Values.monitoring.serviceMonitor.team }}
-    team: {{ .Values.monitoring.serviceMonitor.team }}
-    {{- end }}
-    {{- if .Values.monitoring.serviceMonitor.component }}
-    component: {{ .Values.monitoring.serviceMonitor.component }}
-    {{- end }}
-    # OpenShift monitoring labels
-    {{- if .Values.monitoring.serviceMonitor.openshift }}
-    openshift.io/cluster-monitoring: "true"
-    {{- end }}
-  {{- with .Values.monitoring.serviceMonitor.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    release: prometheus
 spec:
   selector:
     matchLabels:
       {{- include "rag-openshift-ai-api.selectorLabels" . | nindent 6 }}
   
   endpoints:
-    - port: {{ .Values.monitoring.serviceMonitor.port | default "http" }}
-      path: {{ .Values.monitoring.serviceMonitor.path }}
-      interval: {{ .Values.monitoring.serviceMonitor.interval }}
-      scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout }}
-      honorLabels: {{ .Values.monitoring.serviceMonitor.honorLabels | default true }}
-      
-      {{- if .Values.monitoring.serviceMonitor.scheme }}
-      scheme: {{ .Values.monitoring.serviceMonitor.scheme }}
-      {{- end }}
-      
-      {{- if .Values.monitoring.serviceMonitor.tlsConfig }}
-      tlsConfig:
-        {{- toYaml .Values.monitoring.serviceMonitor.tlsConfig | nindent 8 }}
-      {{- end }}
-      
-      {{- if .Values.monitoring.serviceMonitor.basicAuth }}
-      basicAuth:
-        {{- toYaml .Values.monitoring.serviceMonitor.basicAuth | nindent 8 }}
-      {{- end }}
-      
-      {{- if .Values.monitoring.serviceMonitor.bearerTokenFile }}
-      bearerTokenFile: {{ .Values.monitoring.serviceMonitor.bearerTokenFile }}
-      {{- end }}
-      
-      {{- if .Values.monitoring.serviceMonitor.params }}
-      params:
-        {{- toYaml .Values.monitoring.serviceMonitor.params | nindent 8 }}
-      {{- end }}
-      
-      {{- if .Values.monitoring.serviceMonitor.relabelings }}
-      relabelings:
-        {{- toYaml .Values.monitoring.serviceMonitor.relabelings | nindent 8 }}
-      {{- end }}
-      
-      {{- if .Values.monitoring.serviceMonitor.metricRelabelings }}
-      metricRelabelings:
-        {{- toYaml .Values.monitoring.serviceMonitor.metricRelabelings | nindent 8 }}
-      {{- end }}
-      
-      # Health check endpoint
-      {{- if .Values.monitoring.serviceMonitor.healthCheck.enabled }}
-      - port: {{ .Values.monitoring.serviceMonitor.port | default "http" }}
-        path: {{ .Values.monitoring.serviceMonitor.healthCheck.path | default "/health" }}
-        interval: {{ .Values.monitoring.serviceMonitor.healthCheck.interval | default "30s" }}
-        scrapeTimeout: {{ .Values.monitoring.serviceMonitor.healthCheck.scrapeTimeout | default "5s" }}
-        honorLabels: true
-        {{- if .Values.monitoring.serviceMonitor.healthCheck.scheme }}
-        scheme: {{ .Values.monitoring.serviceMonitor.healthCheck.scheme }}
-        {{- end }}
-      {{- end }}
-      
-      # Custom metrics endpoint (if different from main metrics)
-      {{- if .Values.monitoring.serviceMonitor.customMetrics.enabled }}
-      - port: {{ .Values.monitoring.serviceMonitor.port | default "http" }}
-        path: {{ .Values.monitoring.serviceMonitor.customMetrics.path }}
-        interval: {{ .Values.monitoring.serviceMonitor.customMetrics.interval | default "60s" }}
-        scrapeTimeout: {{ .Values.monitoring.serviceMonitor.customMetrics.scrapeTimeout | default "10s" }}
-        honorLabels: true
-        {{- if .Values.monitoring.serviceMonitor.customMetrics.scheme }}
-        scheme: {{ .Values.monitoring.serviceMonitor.customMetrics.scheme }}
-        {{- end }}
-      {{- end }}
-  
-  {{- if .Values.monitoring.serviceMonitor.namespaceSelector }}
-  namespaceSelector:
-    {{- toYaml .Values.monitoring.serviceMonitor.namespaceSelector | nindent 4 }}
-  {{- end }}
-  
-  {{- if .Values.monitoring.serviceMonitor.podTargetLabels }}
-  podTargetLabels:
-    {{- toYaml .Values.monitoring.serviceMonitor.podTargetLabels | nindent 4 }}
-  {{- end }}
-  
-  {{- if .Values.monitoring.serviceMonitor.targetLabels }}
-  targetLabels:
-    {{- toYaml .Values.monitoring.serviceMonitor.targetLabels | nindent 4 }}
-  {{- end }}
-  
-  {{- if .Values.monitoring.serviceMonitor.sampleLimit }}
-  sampleLimit: {{ .Values.monitoring.serviceMonitor.sampleLimit }}
-  {{- end }}
-  
-  {{- if .Values.monitoring.serviceMonitor.jobLabel }}
-  jobLabel: {{ .Values.monitoring.serviceMonitor.jobLabel }}
-  {{- end }}
+    - port: http
+      path: /api/v1/metrics
+      interval: {{ .Values.monitoring.serviceMonitor.interval | default "30s" }}
+      scrapeTimeout: 10s
+      honorLabels: true
 {{- end }} 

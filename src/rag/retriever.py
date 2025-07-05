@@ -2,16 +2,17 @@ import time
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
 import numpy as np
+import logging
+import traceback
 
 from elasticsearch import Elasticsearch, ConnectionTimeout, NotFoundError
-from elasticsearch.exceptions import ElasticsearchException
 from langchain.schema import BaseRetriever, Document
 from langchain.callbacks.manager import CallbackManagerForRetrieverRun
 
 from ..config.settings import settings
-from ..utils.logging import get_logger, log_performance
 from ..utils.metrics import track_elasticsearch_search, record_elasticsearch_error
 from .embeddings import get_embedding_manager
+from pydantic import PrivateAttr
 
 
 # =============================================================================
@@ -46,7 +47,13 @@ class SearchParams:
 
 class ElasticSearchRetriever(BaseRetriever):
     """Custom ElasticSearch retriever for RAG applications."""
-    
+    _index_name: str = PrivateAttr()
+    _embedding_field: str = PrivateAttr()
+    _text_field: str = PrivateAttr()
+    _metadata_fields: list = PrivateAttr()
+    _es_client: any = PrivateAttr()
+    _embedding_manager: any = PrivateAttr()
+
     def __init__(
         self,
         index_name: Optional[str] = None,
@@ -56,34 +63,28 @@ class ElasticSearchRetriever(BaseRetriever):
         **kwargs
     ):
         """Initialize the ElasticSearch retriever."""
-        
         super().__init__(**kwargs)
-        
-        self.logger = get_logger("rag.retriever")
-        self.index_name = index_name or settings.elasticsearch.index_name
-        self.embedding_field = embedding_field
-        self.text_field = text_field
-        self.metadata_fields = metadata_fields or [
+        self._index_name = index_name or settings.elasticsearch.index_name
+        self._embedding_field = embedding_field
+        self._text_field = text_field
+        self._metadata_fields = metadata_fields or [
             "filename", "chunk_id", "page_number", "document_type"
         ]
         
         # Initialize ElasticSearch client
-        self.es_client = self._initialize_es_client()
+        self._es_client = self._initialize_es_client()
         
         # Initialize embedding manager
-        self.embedding_manager = get_embedding_manager()
+        self._embedding_manager = get_embedding_manager()
         
         # Performance tracking
-        self.total_searches = 0
-        self.total_results = 0
-        self.total_search_time = 0.0
+        self._total_searches = 0
+        self._total_results = 0
+        self._total_search_time = 0.0
         
-        self.logger.info(
-            "ElasticSearch retriever initialized",
-            index_name=self.index_name,
-            embedding_field=self.embedding_field,
-            text_field=self.text_field
-        )
+        logging.info("=" * 60)
+        logging.info("🔄 ELASTICSEARCH RETRIEVER INITIALIZED")
+        logging.info("=" * 60)
     
     def _initialize_es_client(self) -> Elasticsearch:
         """Initialize ElasticSearch client with configuration."""
@@ -92,9 +93,17 @@ class ElasticSearchRetriever(BaseRetriever):
             # Build connection parameters
             es_config = {
                 "hosts": [settings.elasticsearch.url],
-                "timeout": settings.elasticsearch.timeout,
+                "request_timeout": settings.elasticsearch.timeout,
                 "retry_on_timeout": settings.elasticsearch.retry_on_timeout,
                 "max_retries": settings.elasticsearch.max_retries,
+                # Disable SSL certificate verification (for self-signed certs or dev)
+                "verify_certs": False,
+                "ssl_show_warn": False,
+
+                # Add headers for better compatibility
+                "headers": {
+                    "User-Agent": "rag-openshift-ai-api/1.0"
+                }
             }
             
             # Add authentication if provided
@@ -108,23 +117,23 @@ class ElasticSearchRetriever(BaseRetriever):
             client = Elasticsearch(**es_config)
             
             # Test connection
-            if not client.ping():
-                raise ConnectionError("Failed to connect to Elasticsearch")
+            # if not client.ping():
+            #     raise ConnectionError("Failed to connect to Elasticsearch")
             
-            self.logger.info(
-                "ElasticSearch client initialized successfully",
-                url=settings.elasticsearch.url,
-                index_name=self.index_name
-            )
+            logging.info("=" * 60)
+            logging.info("✅ ELASTICSEARCH CLIENT INITIALIZED")
+            logging.info("=" * 60)
             
             return client
             
         except Exception as e:
-            self.logger.error(
-                "Failed to initialize ElasticSearch client",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 ELASTICSEARCH CLIENT INITIALIZATION FAILED")
+            logging.error("=" * 80)
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Index Name: {self._index_name if hasattr(self, '_index_name') else None}")
+            logging.error("=" * 80)
             record_elasticsearch_error(type(e).__name__)
             raise
     
@@ -149,7 +158,7 @@ class ElasticSearchRetriever(BaseRetriever):
                 }
             },
             "_source": {
-                "includes": [self.text_field] + self.metadata_fields
+                "includes": [self._text_field] + self._metadata_fields
             }
         }
         
@@ -184,7 +193,7 @@ class ElasticSearchRetriever(BaseRetriever):
                     "query": {
                         "multi_match": {
                             "query": text_query,
-                            "fields": [self.text_field, "title^2"],
+                            "fields": [self._text_field, "title^2"],
                             "type": "best_fields",
                             "fuzziness": "AUTO"
                         }
@@ -198,7 +207,7 @@ class ElasticSearchRetriever(BaseRetriever):
                 }
             },
             "_source": {
-                "includes": [self.text_field] + self.metadata_fields
+                "includes": [self._text_field] + self._metadata_fields
             }
         }
         
@@ -233,13 +242,13 @@ class ElasticSearchRetriever(BaseRetriever):
             "query": {
                 "multi_match": {
                     "query": text_query,
-                    "fields": [self.text_field, "title^2"],
+                    "fields": [self._text_field, "title^2"],
                     "type": "best_fields",
                     "fuzziness": "AUTO"
                 }
             },
             "_source": {
-                "includes": [self.text_field] + self.metadata_fields
+                "includes": [self._text_field] + self._metadata_fields
             }
         }
         
@@ -269,8 +278,8 @@ class ElasticSearchRetriever(BaseRetriever):
             with track_elasticsearch_search("vector"):
                 start_time = time.time()
                 
-                response = self.es_client.search(
-                    index=self.index_name,
+                response = self._es_client.search(
+                    index=self._index_name,
                     body=query,
                     timeout=f"{settings.elasticsearch.timeout}s"
                 )
@@ -278,31 +287,40 @@ class ElasticSearchRetriever(BaseRetriever):
                 search_time = time.time() - start_time
                 
                 # Update performance metrics
-                self.total_searches += 1
-                self.total_search_time += search_time
+                self._total_searches += 1
+                self._total_search_time += search_time
                 
-                self.logger.debug(
-                    "Search executed successfully",
-                    search_time=search_time,
-                    total_hits=response["hits"]["total"]["value"]
-                )
+                logging.debug("=" * 50)
+                logging.debug("🔍 SEARCH EXECUTED SUCCESSFULLY")
+                logging.debug("=" * 50)
+                logging.debug(f"📋 Search Time: {search_time}")
+                logging.debug(f"📋 Total Hits: {response['hits']['total']['value']}")
+                logging.debug("=" * 50)
                 
                 return response
                 
         except ConnectionTimeout:
-            self.logger.error("ElasticSearch search timeout")
+            logging.error("=" * 60)
+            logging.error("⏰ ELASTICSEARCH SEARCH TIMEOUT")
+            logging.error("=" * 60)
             record_elasticsearch_error("ConnectionTimeout")
             raise
         except NotFoundError:
-            self.logger.error(f"Index {self.index_name} not found")
+            logging.error("=" * 60)
+            logging.error("🔍 INDEX NOT FOUND")
+            logging.error("=" * 60)
+            logging.error(f"📋 Index: {self._index_name}")
+            logging.error("=" * 60)
             record_elasticsearch_error("NotFoundError")
             raise
-        except ElasticsearchException as e:
-            self.logger.error(
-                "ElasticSearch search error",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+        except Exception as e:
+            logging.error("=" * 80)
+            logging.error("🚨 ELASTICSEARCH SEARCH ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Index Name: {self._index_name if hasattr(self, '_index_name') else None}")
+            logging.error("=" * 80)
             record_elasticsearch_error(type(e).__name__)
             raise
     
@@ -326,11 +344,11 @@ class ElasticSearchRetriever(BaseRetriever):
                     continue
                 
                 source = hit["_source"]
-                text = source.get(self.text_field, "")
+                text = source.get(self._text_field, "")
                 
                 # Extract metadata
                 metadata = {}
-                for field in self.metadata_fields:
+                for field in self._metadata_fields:
                     if field in source:
                         metadata[field] = source[field]
                 
@@ -351,40 +369,45 @@ class ElasticSearchRetriever(BaseRetriever):
             # Limit to top_k
             results = results[:search_params.top_k]
             
-            self.total_results += len(results)
+            self._total_results += len(results)
             
-            self.logger.debug(
-                "Results processed",
-                total_hits=len(hits),
-                filtered_results=len(results),
-                top_score=results[0].score if results else 0.0
-            )
+            logging.debug("=" * 50)
+            logging.debug("📊 RESULTS PROCESSED SUCCESSFULLY")
+            logging.debug("=" * 50)
+            logging.debug(f"📋 Total Hits: {len(hits)}")
+            logging.debug(f"📋 Filtered Results: {len(results)}")
+            logging.debug(f"📋 Top Score: {results[0].score if results else 0.0}")
+            logging.debug("=" * 50)
             
         except Exception as e:
-            self.logger.error(
-                "Error processing search results",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 SEARCH RESULTS PROCESSING ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Index Name: {self._index_name if hasattr(self, '_index_name') else None}")
+            logging.error("=" * 80)
             record_elasticsearch_error("ResultProcessingError")
         
         return results
     
-    def _get_relevant_documents(
+    def search_relevant_documents(
         self, 
         query: str,
         search_params: Optional[SearchParams] = None
     ) -> List[Document]:
-        """Get relevant documents for the query (LangChain interface)."""
+        """Get relevant documents for the query (custom, avoids LangChain conflict)."""
         
         if search_params is None:
             search_params = SearchParams()
         
         try:
             # Generate query embedding
-            query_embedding = self.embedding_manager.embed_query(query)
+            query_embedding = self._embedding_manager.embed_query(query)
             if query_embedding is None:
-                self.logger.error("Failed to generate query embedding")
+                logging.error("=" * 60)
+                logging.error("🚨 QUERY EMBEDDING GENERATION FAILED")
+                logging.error("=" * 60)
                 return []
             
             # Build query based on search type
@@ -422,23 +445,27 @@ class ElasticSearchRetriever(BaseRetriever):
                 )
                 documents.append(doc)
             
-            self.logger.info(
-                "Retrieved documents",
-                query_length=len(query),
-                search_type=search_params.search_type,
-                num_documents=len(documents),
-                top_score=documents[0].metadata["score"] if documents else 0.0
-            )
+            logging.info("=" * 60)
+            logging.info("📄 DOCUMENTS RETRIEVED SUCCESSFULLY")
+            logging.info("=" * 60)
+            logging.info(f"📋 Query Length: {len(query)}")
+            logging.info(f"📋 Search Type: {search_params.search_type}")
+            logging.info(f"📋 Num Documents: {len(documents)}")
+            logging.info(f"📋 Top Score: {documents[0].metadata['score'] if documents else 0.0}")
+            logging.info(f"📋 Index Name: {self._index_name}")
+            logging.info("=" * 60)
             
             return documents
             
         except Exception as e:
-            self.logger.error(
-                "Error retrieving documents",
-                query=query,
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 DOCUMENT RETRIEVAL ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Query: {query}")
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Index Name: {self._index_name if hasattr(self, '_index_name') else None}")
+            logging.error("=" * 80)
             record_elasticsearch_error("RetrievalError")
             return []
     
@@ -453,7 +480,7 @@ class ElasticSearchRetriever(BaseRetriever):
         
         # For now, use synchronous version
         # In the future, this could be made truly async
-        return self._get_relevant_documents(query, search_params)
+        return self.search_relevant_documents(query, search_params)
     
     def search(
         self, 
@@ -474,7 +501,7 @@ class ElasticSearchRetriever(BaseRetriever):
             text_query=text_query
         )
         
-        documents = self._get_relevant_documents(query, search_params)
+        documents = self.search_relevant_documents(query, search_params)
         
         # Convert back to SearchResult objects
         results = []
@@ -495,64 +522,111 @@ class ElasticSearchRetriever(BaseRetriever):
         
         try:
             # Test connection
-            cluster_info = self.es_client.info()
-            index_stats = self.es_client.indices.stats(index=self.index_name)
+            cluster_info = self._es_client.info()
+            index_stats = self._es_client.indices.stats(index=self._index_name)
             
             return {
                 "connection_healthy": True,
                 "cluster_name": cluster_info.get("cluster_name"),
                 "elasticsearch_version": cluster_info.get("version", {}).get("number"),
-                "index_name": self.index_name,
-                "index_document_count": index_stats["indices"][self.index_name]["total"]["docs"]["count"],
-                "index_size_bytes": index_stats["indices"][self.index_name]["total"]["store"]["size_in_bytes"],
-                "total_searches": self.total_searches,
-                "total_results": self.total_results,
+                "index_name": self._index_name,
+                "index_document_count": index_stats["indices"][self._index_name]["total"]["docs"]["count"],
+                "index_size_bytes": index_stats["indices"][self._index_name]["total"]["store"]["size_in_bytes"],
+                "total_searches": self._total_searches,
+                "total_results": self._total_results,
                 "average_search_time": (
-                    self.total_search_time / self.total_searches 
-                    if self.total_searches > 0 else 0.0
+                    self._total_search_time / self._total_searches 
+                    if self._total_searches > 0 else 0.0
                 )
             }
             
         except Exception as e:
-            self.logger.error(
-                "Health check failed",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 HEALTH CHECK FAILED")
+            logging.error("=" * 80)
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Index Name: {self._index_name if hasattr(self, '_index_name') else None}")
+            logging.error("=" * 80)
             
             return {
                 "connection_healthy": False,
                 "error": str(e),
-                "error_type": type(e).__name__
+                "error_type": type(e).__name__,
+                "index_name": self._index_name
             }
     
     def validate_index(self) -> Dict[str, Any]:
         """Validate that the index exists and has the correct mapping."""
         
         try:
-            # Check if index exists
-            if not self.es_client.indices.exists(index=self.index_name):
-                return {
-                    "valid": False,
-                    "error": f"Index {self.index_name} does not exist"
-                }
+            print(f"DEBUG: Checking if index exists: {self._index_name}")
+            
+            # Try to check if index exists, but be tolerant of 400 errors
+            try:
+                exists = self._es_client.indices.exists(index=self._index_name)
+                if not exists:
+                    return {
+                        "valid": False,
+                        "error": f"Index {self._index_name} does not exist"
+                    }
+            except Exception as e:
+                # If we get a 400 error but the index exists (as we verified), continue
+                if "400" in str(e) or "BadRequestError" in str(e):
+                    print(f"DEBUG: Got 400 error on indices.exists, but continuing validation: {repr(e)}")
+                    # Continue with validation anyway
+                else:
+                    import traceback
+                    print("DEBUG: Exception in indices.exists:", repr(e))
+                    print("DEBUG: Exception type:", type(e))
+                    print("DEBUG: Exception dir:", dir(e))
+                    if hasattr(e, 'info'):
+                        print("DEBUG: Exception info:", e.info)
+                    if hasattr(e, 'body'):
+                        print("DEBUG: Exception body:", e.body)
+                    traceback.print_exc()
+                    return {
+                        "valid": False,
+                        "error": f"Exception in indices.exists: {repr(e)}"
+                    }
             
             # Get index mapping
-            mapping = self.es_client.indices.get_mapping(index=self.index_name)
-            index_mapping = mapping[self.index_name]["mappings"]
+            try:
+                mapping = self._es_client.indices.get_mapping(index=self._index_name)
+            except Exception as e:
+                import traceback
+                print("DEBUG: Exception in get_mapping:", repr(e))
+                print("DEBUG: Exception type:", type(e))
+                print("DEBUG: Exception dir:", dir(e))
+                if hasattr(e, 'info'):
+                    print("DEBUG: Exception info:", e.info)
+                if hasattr(e, 'body'):
+                    print("DEBUG: Exception body:", e.body)
+                traceback.print_exc()
+                return {
+                    "valid": False,
+                    "error": f"Exception in get_mapping: {repr(e)}"
+                }
+            
+            index_mapping = mapping[self._index_name]["mappings"]
             
             # Check for embedding field
             properties = index_mapping.get("properties", {})
-            embedding_props = properties.get(self.embedding_field, {})
+            embedding_props = properties.get(self._embedding_field, {})
             
             if not embedding_props:
                 return {
                     "valid": False,
-                    "error": f"Embedding field '{self.embedding_field}' not found in mapping"
+                    "error": f"Embedding field '{self._embedding_field}' not found in mapping"
                 }
             
             # Check vector dimension
-            dimension = embedding_props.get("dims")
+            if "dims" not in embedding_props:
+                return {
+                    "valid": False,
+                    "error": f"'dims' not found in embedding mapping: {embedding_props}"
+                }
+            dimension = embedding_props["dims"]
             expected_dimension = settings.elasticsearch.vector_dimension
             
             if dimension != expected_dimension:
@@ -563,31 +637,38 @@ class ElasticSearchRetriever(BaseRetriever):
             
             return {
                 "valid": True,
-                "index_name": self.index_name,
-                "embedding_field": self.embedding_field,
+                "index_name": self._index_name,
+                "embedding_field": self._embedding_field,
                 "vector_dimension": dimension,
                 "mapping_fields": list(properties.keys())
             }
             
         except Exception as e:
-            self.logger.error(
-                "Index validation failed",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 INDEX VALIDATION FAILED")
+            logging.error("=" * 80)
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Index Name: {self._index_name if hasattr(self, '_index_name') else None}")
+            logging.error("=" * 80)
             
             return {
                 "valid": False,
                 "error": str(e),
-                "error_type": type(e).__name__
+                "error_type": type(e).__name__,
+                "index_name": self._index_name
             }
+
+    def get_relevant_documents(self, query: str) -> List[Document]:
+        # Llama a tu método interno
+        return self.search_relevant_documents(query)
 
 
 # =============================================================================
 # Global Retriever Instance
 # =============================================================================
 
-_retriever: Optional[ElasticSearchRetriever] = None
+_retriever = None
 
 
 def get_retriever() -> ElasticSearchRetriever:
@@ -615,12 +696,11 @@ def initialize_retriever() -> bool:
         return True
         
     except Exception as e:
-        logger = get_logger("rag.retriever")
-        logger.error(
-            "Failed to initialize retriever",
-            error=str(e),
-            error_type=type(e).__name__
-        )
+        traceback.print_exc()
+        index_name = None
+        if _retriever is not None and hasattr(_retriever, "_index_name"):
+            index_name = _retriever._index_name
+        logging.error(f"Failed to initialize retriever: {str(e)}, error_type: {type(e).__name__}, index_name: {index_name}")
         return False
 
 

@@ -7,7 +7,6 @@ from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim
 
 from ..config.settings import settings
-from ..utils.logging import get_logger, log_performance
 from ..utils.metrics import track_embedding_generation, record_error
 
 
@@ -21,7 +20,6 @@ class EmbeddingManager:
     def __init__(self, model_name: Optional[str] = None, device: Optional[str] = None):
         """Initialize the embedding manager."""
         
-        self.logger = get_logger("rag.embeddings")
         self.model_name = model_name or settings.embedding.model_name
         self.device = device or settings.embedding.device
         self.model: Optional[SentenceTransformer] = None
@@ -34,51 +32,67 @@ class EmbeddingManager:
         self.total_embeddings_generated = 0
         self.total_processing_time = 0.0
         
-        self.logger.info(
-            "Initializing EmbeddingManager",
-            model_name=self.model_name,
-            device=self.device,
-            vector_dimension=self.vector_dimension,
-            batch_size=self.batch_size
-        )
+        logging.info("=" * 60)
+        logging.info("🔄 INITIALIZING EMBEDDING MANAGER")
+        logging.info("=" * 60)
+        logging.info(f"📋 Model Name: {self.model_name}")
+        logging.info(f"📋 Device: {self.device}")
+        logging.info(f"📋 Vector Dimension: {self.vector_dimension}")
+        logging.info(f"📋 Batch Size: {self.batch_size}")
+        logging.info("=" * 60)
     
     def initialize_model(self) -> bool:
         """Initialize and load the sentence transformer model."""
         
         try:
-            with log_performance("model_initialization", "rag.embeddings"):
-                self.logger.info("Loading sentence transformer model", model_name=self.model_name)
-                
-                # Load the model
-                self.model = SentenceTransformer(
-                    self.model_name,
-                    device=self.device
-                )
-                
-                # Validate model dimensions
-                if not self._validate_model_dimensions():
-                    raise ValueError(f"Model dimensions don't match expected {self.vector_dimension}")
-                
-                # Warm up the model
-                self._warm_up_model()
-                
-                self.model_loaded = True
-                self.logger.info(
-                    "Model loaded successfully",
-                    model_name=self.model_name,
-                    device=self.device,
-                    vector_dimension=self.vector_dimension
-                )
-                
-                return True
-                
-        except Exception as e:
-            self.logger.error(
-                "Failed to load model",
-                model_name=self.model_name,
-                error=str(e),
-                error_type=type(e).__name__
+            logging.info("=" * 60)
+            logging.info("🔄 LOADING SENTENCE TRANSFORMER MODEL")
+            logging.info("=" * 60)
+            logging.info(f"📋 Model Name: {self.model_name}")
+            logging.info("=" * 60)
+            
+            # Load the model
+            self.model = SentenceTransformer(
+                self.model_name,
+                device=self.device
             )
+            
+            # Validate model dimensions
+            if not self._validate_model_dimensions():
+                raise ValueError(f"Model dimensions don't match expected {self.vector_dimension}")
+            
+            # Warm up the model
+            self._warm_up_model()
+            
+            self.model_loaded = True
+            logging.info("=" * 60)
+            logging.info("✅ MODEL LOADED SUCCESSFULLY")
+            logging.info("=" * 60)
+            logging.info(f"📋 Model Name: {self.model_name}")
+            logging.info(f"📋 Device: {self.device}")
+            logging.info(f"📋 Vector Dimension: {self.vector_dimension}")
+            logging.info("=" * 60)
+            
+            return True
+            
+        except Exception as e:
+            logging.error("=" * 80)
+            logging.error("🚨 EMBEDDING MODEL LOAD ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Model Name: {self.model_name}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Error Message: {str(e)}")
+            logging.error("")
+            logging.error("🔧 TROUBLESHOOTING STEPS:")
+            logging.error("   🔍 Verify that the embedding model is available")
+            logging.error("   🔍 Check internet connection for model download")
+            logging.error("   🔍 Ensure sufficient disk space")
+            logging.error("   🔍 Verify device availability (CPU/GPU)")
+            logging.error("")
+            logging.error("📊 TECHNICAL DETAILS:")
+            logging.error(f"   Exception Type: {type(e).__name__}")
+            logging.error(f"   Full Error: {str(e)}")
+            logging.error("=" * 80)
             record_error(type(e).__name__, "embeddings")
             return False
     
@@ -96,20 +110,32 @@ class EmbeddingManager:
             actual_dimension = test_embedding.shape[1]
             expected_dimension = self.vector_dimension
             
-            self.logger.info(
-                "Model dimension validation",
-                expected_dimension=expected_dimension,
-                actual_dimension=actual_dimension
-            )
+            logging.info("=" * 50)
+            logging.info("🔍 MODEL DIMENSION VALIDATION")
+            logging.info("=" * 50)
+            logging.info(f"📋 Expected Dimension: {expected_dimension}")
+            logging.info(f"📋 Actual Dimension: {actual_dimension}")
+            logging.info("=" * 50)
             
             return actual_dimension == expected_dimension
             
         except Exception as e:
-            self.logger.error(
-                "Dimension validation failed",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 DIMENSION VALIDATION ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Expected Dimension: {self.vector_dimension}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Error Message: {str(e)}")
+            logging.error("")
+            logging.error("🔧 TROUBLESHOOTING STEPS:")
+            logging.error("   🔍 Verify model configuration matches expected dimensions")
+            logging.error("   🔍 Check if model is compatible with current settings")
+            logging.error("   🔍 Verify model file integrity")
+            logging.error("")
+            logging.error("📊 TECHNICAL DETAILS:")
+            logging.error(f"   Exception Type: {type(e).__name__}")
+            logging.error(f"   Full Error: {str(e)}")
+            logging.error("=" * 80)
             return False
     
     def _warm_up_model(self) -> None:
@@ -122,7 +148,11 @@ class EmbeddingManager:
                 "Final warm-up sentence for model optimization."
             ]
             
-            self.logger.info("Warming up model", num_texts=len(warm_up_texts))
+            logging.info("=" * 50)
+            logging.info("🔥 MODEL WARM-UP STARTED")
+            logging.info("=" * 50)
+            logging.info(f"📋 Number of Texts: {len(warm_up_texts)}")
+            logging.info("=" * 50)
             
             # Generate embeddings for warm-up
             embeddings = self.model.encode(
@@ -132,18 +162,23 @@ class EmbeddingManager:
                 normalize_embeddings=self.normalize_embeddings
             )
             
-            self.logger.info(
-                "Model warm-up completed",
-                num_embeddings=len(embeddings),
-                embedding_shape=embeddings.shape
-            )
+            logging.info("=" * 50)
+            logging.info("✅ MODEL WARM-UP COMPLETED")
+            logging.info("=" * 50)
+            logging.info(f"📋 Number of Embeddings: {len(embeddings)}")
+            logging.info(f"📋 Embedding Shape: {embeddings.shape}")
+            logging.info("=" * 50)
             
         except Exception as e:
-            self.logger.warning(
-                "Model warm-up failed",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.warning("=" * 60)
+            logging.warning("⚠️ MODEL WARM-UP WARNING")
+            logging.warning("=" * 60)
+            logging.warning(f"📋 Model Name: {self.model_name}")
+            logging.warning(f"📋 Error Type: {type(e).__name__}")
+            logging.warning(f"📋 Error Message: {str(e)}")
+            logging.warning("")
+            logging.warning("💡 NOTE: Model warm-up failed, but model may still work")
+            logging.warning("=" * 60)
     
     def preprocess_text(self, text: str) -> str:
         """Preprocess text for consistency with the ingestion pipeline."""
@@ -161,7 +196,7 @@ class EmbeddingManager:
         max_length = 512  # SentenceTransformer default
         if len(processed_text) > max_length:
             processed_text = processed_text[:max_length]
-            self.logger.debug("Text truncated", original_length=len(text), truncated_length=max_length)
+            logging.debug(f"Text truncated, original_length={len(text)}, truncated_length={max_length}")
         
         return processed_text
     
@@ -169,7 +204,7 @@ class EmbeddingManager:
         """Generate embedding for a single query text."""
         
         if not self.model_loaded or self.model is None:
-            self.logger.error("Model not loaded, cannot generate embeddings")
+            logging.error("Model not loaded, cannot generate embeddings")
             return None
         
         try:
@@ -177,7 +212,7 @@ class EmbeddingManager:
             processed_text = self.preprocess_text(text)
             
             if not processed_text:
-                self.logger.warning("Empty text after preprocessing")
+                logging.warning("Empty text after preprocessing")
                 return None
             
             # Generate embedding with performance tracking
@@ -197,22 +232,28 @@ class EmbeddingManager:
                 self.total_embeddings_generated += 1
                 self.total_processing_time += processing_time
             
-            self.logger.debug(
-                "Query embedding generated",
-                text_length=len(processed_text),
-                embedding_shape=embedding.shape,
-                processing_time=processing_time
-            )
+            logging.debug(f"Query embedding generated, text_length={len(processed_text)}, embedding_shape={embedding.shape}, processing_time={processing_time}")
             
             return embedding[0]  # Return single embedding
             
         except Exception as e:
-            self.logger.error(
-                "Failed to generate query embedding",
-                text_length=len(text),
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 QUERY EMBEDDING GENERATION ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Text Length: {len(text)}")
+            logging.error(f"📋 Model Name: {self.model_name}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Error Message: {str(e)}")
+            logging.error("")
+            logging.error("🔧 TROUBLESHOOTING STEPS:")
+            logging.error("   🔍 Verify that the embedding model is loaded")
+            logging.error("   🔍 Check if the input text is valid")
+            logging.error("   🔍 Verify model memory availability")
+            logging.error("")
+            logging.error("📊 TECHNICAL DETAILS:")
+            logging.error(f"   Exception Type: {type(e).__name__}")
+            logging.error(f"   Full Error: {str(e)}")
+            logging.error("=" * 80)
             record_error(type(e).__name__, "embeddings")
             return None
     
@@ -220,11 +261,11 @@ class EmbeddingManager:
         """Generate embeddings for a batch of texts."""
         
         if not self.model_loaded or self.model is None:
-            self.logger.error("Model not loaded, cannot generate embeddings")
+            logging.error("Model not loaded, cannot generate embeddings")
             return None
         
         if not texts:
-            self.logger.warning("Empty text list provided")
+            logging.warning("Empty text list provided")
             return None
         
         try:
@@ -233,7 +274,7 @@ class EmbeddingManager:
             processed_texts = [text for text in processed_texts if text]  # Remove empty texts
             
             if not processed_texts:
-                self.logger.warning("No valid texts after preprocessing")
+                logging.warning("No valid texts after preprocessing")
                 return None
             
             # Generate embeddings with performance tracking
@@ -253,22 +294,29 @@ class EmbeddingManager:
                 self.total_embeddings_generated += len(processed_texts)
                 self.total_processing_time += processing_time
             
-            self.logger.debug(
-                "Batch embeddings generated",
-                num_texts=len(processed_texts),
-                embedding_shape=embeddings.shape,
-                processing_time=processing_time
-            )
+            logging.debug(f"Batch embeddings generated, num_texts={len(processed_texts)}, embedding_shape={embeddings.shape}, processing_time={processing_time}")
             
             return embeddings
             
         except Exception as e:
-            self.logger.error(
-                "Failed to generate batch embeddings",
-                num_texts=len(texts),
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 BATCH EMBEDDING GENERATION ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Number of Texts: {len(texts)}")
+            logging.error(f"📋 Model Name: {self.model_name}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Error Message: {str(e)}")
+            logging.error("")
+            logging.error("🔧 TROUBLESHOOTING STEPS:")
+            logging.error("   🔍 Verify that the embedding model is loaded")
+            logging.error("   🔍 Check if the input texts are valid")
+            logging.error("   🔍 Verify batch size configuration")
+            logging.error("   🔍 Check available memory for batch processing")
+            logging.error("")
+            logging.error("📊 TECHNICAL DETAILS:")
+            logging.error(f"   Exception Type: {type(e).__name__}")
+            logging.error(f"   Full Error: {str(e)}")
+            logging.error("=" * 80)
             record_error(type(e).__name__, "embeddings")
             return None
     
@@ -280,11 +328,20 @@ class EmbeddingManager:
             return float(similarity)
             
         except Exception as e:
-            self.logger.error(
-                "Failed to compute similarity",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 60)
+            logging.error("🚨 SIMILARITY COMPUTATION ERROR")
+            logging.error("=" * 60)
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Error Message: {str(e)}")
+            logging.error("")
+            logging.error("🔧 TROUBLESHOOTING STEPS:")
+            logging.error("   🔍 Verify embedding dimensions match")
+            logging.error("   🔍 Check if embeddings are valid numpy arrays")
+            logging.error("")
+            logging.error("📊 TECHNICAL DETAILS:")
+            logging.error(f"   Exception Type: {type(e).__name__}")
+            logging.error(f"   Full Error: {str(e)}")
+            logging.error("=" * 60)
             return 0.0
     
     def validate_consistency(self) -> Dict[str, Any]:
@@ -334,21 +391,33 @@ class EmbeddingManager:
                         validation_results["tests_failed"] += 1
                         validation_results["errors"].append("Similarity computation issue")
             
-            self.logger.info(
-                "Consistency validation completed",
-                tests_passed=validation_results["tests_passed"],
-                tests_failed=validation_results["tests_failed"],
-                errors=validation_results["errors"]
-            )
+            logging.info("=" * 60)
+            logging.info("✅ CONSISTENCY VALIDATION COMPLETED")
+            logging.info("=" * 60)
+            logging.info(f"📋 Tests Passed: {validation_results['tests_passed']}")
+            logging.info(f"📋 Tests Failed: {validation_results['tests_failed']}")
+            logging.info(f"📋 Errors: {validation_results['errors']}")
+            logging.info("=" * 60)
             
         except Exception as e:
             validation_results["tests_failed"] += 1
             validation_results["errors"].append(f"Validation error: {str(e)}")
-            self.logger.error(
-                "Consistency validation failed",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 EMBEDDING CONSISTENCY VALIDATION ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Model Name: {self.model_name}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Error Message: {str(e)}")
+            logging.error("")
+            logging.error("🔧 TROUBLESHOOTING STEPS:")
+            logging.error("   🔍 Verify model is properly loaded")
+            logging.error("   🔍 Check model configuration consistency")
+            logging.error("   🔍 Verify preprocessing pipeline")
+            logging.error("")
+            logging.error("📊 TECHNICAL DETAILS:")
+            logging.error(f"   Exception Type: {type(e).__name__}")
+            logging.error(f"   Full Error: {str(e)}")
+            logging.error("=" * 80)
         
         return validation_results
     
@@ -397,14 +466,25 @@ class EmbeddingManager:
                 self.model = None
             
             self.model_loaded = False
-            self.logger.info("Embedding manager cleaned up")
+            logging.info("=" * 50)
+            logging.info("🧹 EMBEDDING MANAGER CLEANED UP")
+            logging.info("=" * 50)
             
         except Exception as e:
-            self.logger.error(
-                "Error during cleanup",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 60)
+            logging.error("🚨 EMBEDDING CLEANUP ERROR")
+            logging.error("=" * 60)
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error(f"📋 Error Message: {str(e)}")
+            logging.error("")
+            logging.error("🔧 TROUBLESHOOTING STEPS:")
+            logging.error("   🔍 Check if model is properly loaded")
+            logging.error("   🔍 Verify memory cleanup process")
+            logging.error("")
+            logging.error("📊 TECHNICAL DETAILS:")
+            logging.error(f"   Exception Type: {type(e).__name__}")
+            logging.error(f"   Full Error: {str(e)}")
+            logging.error("=" * 60)
 
 
 # =============================================================================
@@ -434,12 +514,23 @@ def initialize_embeddings() -> bool:
         _embedding_manager = EmbeddingManager()
         return _embedding_manager.initialize_model()
     except Exception as e:
-        logger = get_logger("rag.embeddings")
-        logger.error(
-            "Failed to initialize embeddings",
-            error=str(e),
-            error_type=type(e).__name__
-        )
+        logger = logging.getLogger(__name__)
+        logger.error("=" * 80)
+        logger.error("🚨 EMBEDDING INITIALIZATION ERROR")
+        logger.error("=" * 80)
+        logger.error(f"📋 Error Type: {type(e).__name__}")
+        logger.error(f"📋 Error Message: {str(e)}")
+        logger.error("")
+        logger.error("🔧 TROUBLESHOOTING STEPS:")
+        logger.error("   🔍 Verify that the embedding model is available")
+        logger.error("   🔍 Check internet connection for model download")
+        logger.error("   🔍 Ensure sufficient disk space")
+        logger.error("   🔍 Verify device availability (CPU/GPU)")
+        logger.error("")
+        logger.error("📊 TECHNICAL DETAILS:")
+        logger.error(f"   Exception Type: {type(e).__name__}")
+        logger.error(f"   Full Error: {str(e)}")
+        logger.error("=" * 80)
         return False
 
 

@@ -7,20 +7,6 @@ This package contains utility functions and helpers for:
 - Common operations and helpers
 """
 
-from .logging import (
-    setup_logging,
-    get_logger,
-    log_request,
-    log_rag_operation,
-    log_performance,
-    log_error,
-    log_openshift_event,
-    sanitize_log_data,
-    get_correlation_id,
-    log_startup_info,
-    log_shutdown_info,
-)
-
 from .metrics import (
     setup_metrics,
     get_metrics,
@@ -41,17 +27,6 @@ from .metrics import (
 )
 
 __all__ = [
-    "setup_logging",
-    "get_logger", 
-    "log_request",
-    "log_rag_operation",
-    "log_performance",
-    "log_error",
-    "log_openshift_event",
-    "sanitize_log_data",
-    "get_correlation_id",
-    "log_startup_info",
-    "log_shutdown_info",
     "setup_metrics",
     "get_metrics",
     "track_api_request",

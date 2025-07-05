@@ -11,6 +11,65 @@ A Retrieval-Augmented Generation (RAG) API service designed for enterprise envir
 - **Scalable**: Horizontal scaling and load balancing support
 - **Observability**: Prometheus metrics, structured logging, health checks
 
+## 📖 API Documentation
+
+### Main Endpoints
+
+| Method | Endpoint              | Description                                 |
+|--------|-----------------------|---------------------------------------------|
+| GET    | `/health`             | Health check (API status)                   |
+| GET    | `/ready`              | Readiness check (dependencies status)       |
+| GET    | `/api/v1/metrics`     | Prometheus metrics for monitoring           |
+| GET    | `/api/v1/info`        | API info, version, and available models     |
+| POST   | `/api/v1/query`       | Main RAG endpoint: ask questions to the LLM |
+
+### Example: Health Check
+
+```bash
+curl http://localhost:8000/health
+```
+
+### Example: Query Endpoint
+
+```bash
+curl -X POST http://localhost:8000/api/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is OpenShift?",
+    "top_k": 3
+  }'
+```
+
+**Sample Response:**
+```json
+{
+  "answer": "OpenShift is a Kubernetes platform that provides enterprise-grade container orchestration capabilities...",
+  "sources": [
+    {
+      "id": "doc_123",
+      "text": "OpenShift is a Kubernetes platform...",
+      "metadata": {
+        "category": "cloud",
+        "source": "openshift_docs",
+        "language": "en"
+      },
+      "score": 0.95
+    }
+  ],
+  "metadata": {
+    "model": "RedHatAI/granite-3.1-8b-instruct",
+    "latency_ms": 1250,
+    "query_time_ms": 150,
+    "retrieval_time_ms": 200,
+    "generation_time_ms": 900
+  }
+}
+```
+
+### More
+
+- For full request/response schemas, error codes, and advanced usage, see [`docs/api.md`](docs/api.md).
+
 ## 📋 Prerequisites
 
 - **OpenShift 4.18+** cluster with admin access
@@ -491,14 +550,11 @@ oc logs <pod-name>
 #### 2. Build Failures with OpenShift
 
 ```bash
-# If you get "no such file or directory" error for Dockerfile:
-# This project provides both Containerfile and Dockerfile for compatibility
+# If you get "no such file or directory" error for Containerfile:
+# This project uses Containerfile for building
 
 # Option 1: Using Containerfile (recommended)
 oc new-build --strategy=docker --binary --name=rag-api --dockerfile=Containerfile
-
-# Option 2: Using Dockerfile (for compatibility)
-oc new-build --strategy=docker --binary --name=rag-api
 
 # If you get "unknown flag: --from-dir" error:
 # Make sure to execute commands separately, not together

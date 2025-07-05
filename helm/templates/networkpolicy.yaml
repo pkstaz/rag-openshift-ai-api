@@ -16,71 +16,15 @@ spec:
   
   policyTypes:
     - Ingress
-    - Egress
   
-  # Ingress Rules - Incoming Traffic
   ingress:
-    {{- if .Values.networkPolicy.ingressRules }}
-    {{- toYaml .Values.networkPolicy.ingressRules | nindent 4 }}
-    {{- else }}
-    # Allow traffic from OpenShift Router
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: openshift-ingress
-        - namespaceSelector:
-            matchLabels:
-              name: openshift-route-controller-manager
-        - podSelector:
-            matchLabels:
-              app: router
-        - podSelector:
-            matchLabels:
-              app: haproxy-router
-      ports:
-        - protocol: TCP
-          port: {{ .Values.service.targetPort }}
-    
-    # Allow traffic from Prometheus/Monitoring
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: openshift-monitoring
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-        - podSelector:
-            matchLabels:
-              app: prometheus
-        - podSelector:
-            matchLabels:
-              app: prometheus-operator
-      ports:
-        - protocol: TCP
-          port: {{ .Values.service.targetPort }}
-    
-    # Allow traffic from same namespace (inter-service communication)
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Release.Namespace }}
       ports:
         - protocol: TCP
-          port: {{ .Values.service.targetPort }}
-    
-    # Allow traffic from specific namespaces if configured
-    {{- if .Values.networkPolicy.allowedNamespaces }}
-    - from:
-        {{- range .Values.networkPolicy.allowedNamespaces }}
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ . }}
-        {{- end }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.service.targetPort }}
-    {{- end }}
-    {{- end }}
+          port: {{ .Values.app.port }}
   
   # Egress Rules - Outgoing Traffic
   egress:

@@ -25,7 +25,7 @@ metrics_registry = CollectorRegistry()
 rag_api_requests_total = Counter(
     'rag_api_requests_total',
     'Total number of API requests',
-    ['method', 'endpoint', 'status'],
+    ['method', 'endpoint', 'status_code'],
     registry=metrics_registry
 )
 
@@ -203,7 +203,7 @@ def track_api_request(method: str, endpoint: str):
                 rag_api_requests_total.labels(
                     method=method, 
                     endpoint=endpoint, 
-                    status=status
+                    status_code=status
                 ).inc()
                 
                 # Decrement active requests
@@ -243,7 +243,7 @@ def track_api_request(method: str, endpoint: str):
                 rag_api_requests_total.labels(
                     method=method, 
                     endpoint=endpoint, 
-                    status=status
+                    status_code=status
                 ).inc()
                 
                 # Decrement active requests
@@ -500,9 +500,13 @@ def get_metrics_summary() -> Dict[str, Any]:
 
 def increment_request_counter(method: str, endpoint: str, status_code: str) -> None:
     """Increment API request counter."""
-    rag_api_requests_total.labels(method=method, endpoint=endpoint, status_code=status_code).inc()
+    # Sanitize endpoint for Prometheus labels (replace / with _ and remove leading _)
+    sanitized_endpoint = endpoint.replace('/', '_').replace('-', '_').lstrip('_')
+    rag_api_requests_total.labels(method=method, endpoint=sanitized_endpoint, status_code=status_code).inc()
 
 
 def record_request_duration(method: str, endpoint: str, status_code: str, duration: float) -> None:
     """Record API request duration."""
-    rag_api_request_duration.labels(method=method, endpoint=endpoint, status_code=status_code).observe(duration) 
+    # Sanitize endpoint for Prometheus labels (replace / with _ and remove leading _)
+    sanitized_endpoint = endpoint.replace('/', '_').replace('-', '_').lstrip('_')
+    rag_api_request_duration_seconds.labels(method=method, endpoint=sanitized_endpoint).observe(duration) 

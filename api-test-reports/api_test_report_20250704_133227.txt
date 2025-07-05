@@ -1,0 +1,26 @@
+API Test Report
+===============
+Timestamp: Fri Jul  4 13:32:27 -04 2025
+API Endpoint: http://rag-openshift-ai-api-rag-openshift-ai.apps.cluster-2gbhp.2gbhp.sandbox1120.opentlc.com
+Test Duration: 
+
+Test Summary:
+  Total Tests: 24
+  Passed: 24
+  Failed: 0
+  Skipped: 0
+  Success Rate: 100%
+
+Performance Metrics:
+  Total Requests: 23
+  Successful Requests: 23
+  Failed Requests: 0
+  Average Response Time: 288ms
+  Min Response Time: 284ms
+  Max Response Time: 296ms
+
+Test Configuration:
+  Verbose Mode: true
+  Quick Mode: false
+  Load Test: false
+  Timeout: 30s

@@ -1,5 +1,6 @@
 from typing import Optional, List
-from pydantic import BaseSettings, Field, validator
+from pydantic_settings import BaseSettings
+from pydantic import Field, validator
 import os
 
 
@@ -25,9 +26,15 @@ class APISettings(BaseSettings):
         description="CORS allowed methods"
     )
     
+    docs_enabled: bool = Field(default=True, description="Enable OpenAPI docs (Swagger/Redoc)")
+    cors_enabled: bool = Field(default=True, description="Enable CORS middleware")
+    
     class Config:
         env_prefix = "API_"
         env_file = ".env"
+        model_config = {
+            "protected_namespaces": ()
+        }
 
 
 class ElasticsearchSettings(BaseSettings):
@@ -48,13 +55,16 @@ class ElasticsearchSettings(BaseSettings):
     class Config:
         env_prefix = "ES_"
         env_file = ".env"
+        model_config = {
+            "protected_namespaces": ()
+        }
 
 
 class VLLMSettings(BaseSettings):
     """vLLM configuration settings."""
     
-    url: str = Field(default="http://localhost:8001", description="vLLM server URL")
-    model_name: str = Field(default="RedHatAI/granite-3.1-8b-instruct", description="Default model name")
+    url: str = Field(default="http://localhost:8080", description="vLLM server URL")
+    model_name: str = Field(default="granite-3-1-8b-instruct", description="Default model name")
     
     timeout: int = Field(default=60, description="Request timeout in seconds")
     max_retries: int = Field(default=3, description="Maximum retry attempts")
@@ -68,6 +78,9 @@ class VLLMSettings(BaseSettings):
     class Config:
         env_prefix = "VLLM_"
         env_file = ".env"
+        model_config = {
+            "protected_namespaces": ()
+        }
 
 
 class EmbeddingSettings(BaseSettings):
@@ -94,6 +107,9 @@ class EmbeddingSettings(BaseSettings):
     class Config:
         env_prefix = "EMBEDDING_"
         env_file = ".env"
+        model_config = {
+            "protected_namespaces": ()
+        }
 
 
 class RAGSettings(BaseSettings):
@@ -127,6 +143,9 @@ class RAGSettings(BaseSettings):
     class Config:
         env_prefix = "RAG_"
         env_file = ".env"
+        model_config = {
+            "protected_namespaces": ()
+        }
 
 
 class EnvironmentConfig(BaseSettings):
@@ -138,6 +157,24 @@ class EnvironmentConfig(BaseSettings):
     metrics_enabled: bool = Field(default=True, description="Enable metrics collection")
 
 
+class LoggingSettings(BaseSettings):
+    level: str = Field(default="INFO", description="Logging level")
+
+    class Config:
+        env_prefix = "LOGGING_"
+        env_file = ".env"
+
+
+class MetricsSettings(BaseSettings):
+    enabled: bool = Field(default=True, description="Enable metrics collection")
+    host: str = Field(default="0.0.0.0", description="Metrics server host")
+    port: int = Field(default=9000, description="Metrics server port")
+
+    class Config:
+        env_prefix = "METRICS_"
+        env_file = ".env"
+
+
 class Settings(BaseSettings):
     """Main application settings combining all configuration sections."""
     
@@ -147,6 +184,8 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     rag: RAGSettings = Field(default_factory=RAGSettings)
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    metrics: MetricsSettings = Field(default_factory=MetricsSettings)
     
     class Config:
         env_file = ".env"
@@ -154,6 +193,9 @@ class Settings(BaseSettings):
         case_sensitive = False
         # For OpenShift: variables will be injected via ConfigMap/Secret
         # No need to read from .env file in production
+        model_config = {
+            "protected_namespaces": ("settings_",)
+        }
 
 
 # Global settings instance

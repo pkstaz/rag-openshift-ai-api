@@ -1006,254 +1006,86 @@ func main() {
    result = cached_query("What is OpenShift?", 3, filters_str)
    ```
 
-## Troubleshooting
+## Troubleshooting & Common Issues
 
-### Common Error Scenarios
+This section documents real-world issues encountered during deployment and integration, along with their solutions.
 
-#### 1. Connection Errors
+### 1. Double Prefix in API Routes (404 Errors)
+**Symptom:** All API endpoints return 404, and OpenAPI docs show double prefix (e.g., `/api/api/v1/query`).
 
-**Symptoms:**
-```
-ConnectionError: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded
-```
+**Solution:**
+- Ensure FastAPI routers are included with the correct `prefix` and that no double prefixing occurs in `main.py` or `routes.py`.
+- Example fix:
+  ```python
+  # main.py
+  app.include_router(api_router, prefix="/api/v1")
+  # routes.py
+  router = APIRouter()
+  # ...
+  ```
 
-**Solutions:**
-- Check if API service is running
-- Verify endpoint URL and port
-- Check network connectivity
-- For OpenShift: verify route configuration
+### 2. Health/Readiness Checks Failing
+**Symptom:** Liveness/readiness probes fail, pod marked as not ready.
 
-**Debug Steps:**
-```bash
-# Check if service is running
-oc get pods -l app=rag-api
+**Solution:**
+- Ensure `/health` and `/ready` endpoints return correct status and are not protected by auth.
+- Adjust `readinessProbe` in deployment YAML to match the correct path and port.
+- Example:
+  ```yaml
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8000
+  ```
 
-# Check service logs
-oc logs -l app=rag-api
+### 3. Logging Errors & Generic Error Messages
+**Symptom:** API returns generic error, logs show `TypeError` in logging calls.
 
-# Test connectivity
-curl -v http://localhost:8000/health
-```
+**Solution:**
+- Fix logging calls to use correct arguments (avoid unexpected keyword arguments).
+- Improve error handling to log and return meaningful messages.
+- Example:
+  ```python
+  logging.error("Error in agent: %s", str(e))
+  ```
 
-#### 2. Timeout Errors
+### 4. DocumentSource Validation Error (score > 1, document None)
+**Symptom:** API returns validation error, logs show `score` > 1 or `document` is None.
 
-**Symptoms:**
-```
-TimeoutError: Request timed out after 30 seconds
-```
+**Solution:**
+- Normalize score to max 1.0 (e.g., `min(raw_score / 2.0, 1.0)`).
+- Use `document = "Unknown"` if missing.
+- Example:
+  ```python
+  normalized_score = min(raw_score / 2.0, 1.0)
+  document_name = doc.metadata.get("document_name") or "Unknown"
+  ```
 
-**Solutions:**
-- Increase timeout value
-- Check system resources (CPU, memory)
-- Verify ElasticSearch and vLLM performance
-- Consider reducing `top_k` parameter
+### 5. Container Image Not Updating Code
+**Symptom:** Pod runs old code even after rebuild.
 
-**Debug Steps:**
-```bash
-# Check resource usage
-oc top pods -l app=rag-api
+**Solution:**
+- Force Docker/Podman build without cache:
+  ```bash
+  podman build --no-cache -f Containerfile -t rag-openshift-ai-api:dev-X .
+  ```
+- Uninstall and reinstall Helm release to ensure new image is used:
+  ```bash
+  helm uninstall rag-openshift-ai-api -n rag-openshift-ai
+  helm install rag-openshift-ai-api ./helm -n rag-openshift-ai
+  ```
 
-# Check ElasticSearch performance
-curl http://localhost:9200/_cluster/health
+### 6. Test Script Detects Wrong Route
+**Symptom:** `test-api.sh` script uses wrong endpoint or fails health check.
 
-# Check vLLM performance
-curl http://localhost:8001/v1/models
-```
+**Solution:**
+- Remove auto-detection logic and set `API_ENDPOINT` manually at the top of the script.
+- Or pass with `-e` argument:
+  ```bash
+  ./scripts/test-api.sh -e "http://your-api-url" -v
+  ```
 
-#### 3. Validation Errors
-
-**Symptoms:**
-```
-HTTPError: 422 Client Error: Unprocessable Entity
-```
-
-**Solutions:**
-- Verify request format and required fields
-- Check parameter values and constraints
-- Ensure proper JSON formatting
-
-**Debug Steps:**
-```bash
-# Validate JSON format
-echo '{"query": "test"}' | jq .
-
-# Test with minimal request
-curl -X POST http://localhost:8000/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "test query"}'
-```
-
-#### 4. Service Unavailable
-
-**Symptoms:**
-```
-HTTPError: 503 Service Unavailable
-```
-
-**Solutions:**
-- Check dependency services (ElasticSearch, vLLM)
-- Verify service configuration
-- Check resource limits and quotas
-
-**Debug Steps:**
-```bash
-# Check readiness status
-curl http://localhost:8000/ready
-
-# Check dependency health
-curl http://localhost:9200/_cluster/health
-curl http://localhost:8001/v1/models
-
-# Check service logs
-oc logs -l app=rag-api --tail=100
-```
-
-### Debugging Techniques
-
-#### 1. Enable Verbose Logging
-
-```bash
-# Set debug environment variable
-export API_DEBUG=true
-
-# Restart API service
-oc rollout restart deployment/rag-api
-
-# Check logs with debug level
-oc logs -l app=rag-api --tail=100 | grep DEBUG
-```
-
-#### 2. Check Metrics
-
-```bash
-# Get Prometheus metrics
-curl http://localhost:8000/api/v1/metrics
-
-# Check specific metrics
-curl http://localhost:8000/api/v1/metrics | grep rag_api_requests_total
-curl http://localhost:8000/api/v1/metrics | grep rag_api_request_duration_seconds
-```
-
-#### 3. Test Individual Components
-
-```bash
-# Test ElasticSearch connection
-curl http://localhost:9200/_cat/indices
-
-# Test vLLM connection
-curl http://localhost:8001/v1/models
-
-# Test embedding model
-python3 -c "
-from src.rag.embeddings import EmbeddingManager
-em = EmbeddingManager()
-embedding = em.get_embedding('test query')
-print(f'Embedding shape: {embedding.shape}')
-"
-```
-
-#### 4. Performance Analysis
-
-```bash
-# Run load test
-./scripts/test-api.sh -l -c 5 -d 60
-
-# Monitor system resources
-htop
-iotop
-netstat -i
-
-# Check API performance
-curl -w "@curl-format.txt" -o /dev/null -s http://localhost:8000/health
-```
-
-### Log Analysis
-
-#### 1. Structured Logs
-
-The API uses structured JSON logging. Look for these log patterns:
-
-```json
-{
-  "timestamp": "2024-01-15T14:30:25.123Z",
-  "level": "INFO",
-  "correlation_id": "req-12345",
-  "message": "Processing query",
-  "query": "What is OpenShift?",
-  "top_k": 3
-}
-```
-
-#### 2. Error Logs
-
-```json
-{
-  "timestamp": "2024-01-15T14:30:25.123Z",
-  "level": "ERROR",
-  "correlation_id": "req-12345",
-  "message": "ElasticSearch connection failed",
-  "error": "Connection timeout",
-  "endpoint": "/api/v1/query"
-}
-```
-
-#### 3. Performance Logs
-
-```json
-{
-  "timestamp": "2024-01-15T14:30:25.123Z",
-  "level": "INFO",
-  "correlation_id": "req-12345",
-  "message": "Query completed",
-  "latency_ms": 1250,
-  "retrieval_time_ms": 300,
-  "generation_time_ms": 800
-}
-```
-
-### Performance Issues
-
-#### 1. High Response Times
-
-**Causes:**
-- Large `top_k` values
-- Complex queries
-- System resource constraints
-- Network latency
-
-**Solutions:**
-- Reduce `top_k` parameter
-- Optimize ElasticSearch queries
-- Scale up resources
-- Implement caching
-
-#### 2. High Error Rates
-
-**Causes:**
-- Service overload
-- Resource exhaustion
-- Network issues
-- Configuration problems
-
-**Solutions:**
-- Implement rate limiting
-- Scale horizontally
-- Check resource limits
-- Review configuration
-
-#### 3. Memory Issues
-
-**Causes:**
-- Large embedding models
-- High concurrent requests
-- Memory leaks
-- Insufficient resources
-
-**Solutions:**
-- Monitor memory usage
-- Implement request limits
-- Optimize model loading
-- Scale resources
+For more troubleshooting tips, see the logs and check the deployment YAMLs for correct configuration.
 
 ## Performance Optimization
 

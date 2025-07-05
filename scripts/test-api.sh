@@ -23,7 +23,7 @@ REPORTS_DIR="$PROJECT_ROOT/api-test-reports"
 TEMP_DIR="$PROJECT_ROOT/temp"
 
 # Default values
-API_ENDPOINT=""
+API_ENDPOINT="http://rag-openshift-ai-api-rag-openshift-ai.apps.cluster-2gbhp.2gbhp.sandbox1120.opentlc.com"
 VERBOSE=false
 QUICK_MODE=false
 LOAD_TEST=false
@@ -42,6 +42,12 @@ SKIPPED_TESTS=0
 RESPONSE_TIMES=()
 ERROR_COUNT=0
 SUCCESS_COUNT=0
+
+# =============================
+# Configuración manual de endpoint
+# =============================
+# Poner aquí la URL de la API si se desea fijar manualmente:
+API_ENDPOINT="http://rag-openshift-ai-api-rag-openshift-ai.apps.cluster-2gbhp.2gbhp.sandbox1120.opentlc.com"
 
 # Function to print colored output
 print_header() {
@@ -109,53 +115,6 @@ Environment Variables:
 EOF
 }
 
-# Function to detect API endpoint
-detect_endpoint() {
-    if [ -n "$API_ENDPOINT" ]; then
-        print_status "Using provided endpoint: $API_ENDPOINT"
-        return 0
-    fi
-    
-    print_status "Auto-detecting API endpoint..."
-    
-    # Check environment variable
-    if [ -n "${API_ENDPOINT:-}" ]; then
-        API_ENDPOINT="$API_ENDPOINT"
-        print_status "Using API_ENDPOINT environment variable: $API_ENDPOINT"
-        return 0
-    fi
-    
-    # Check common local endpoints
-    local endpoints=(
-        "http://localhost:8000"
-        "http://127.0.0.1:8000"
-        "http://localhost:8080"
-        "http://127.0.0.1:8080"
-    )
-    
-    for endpoint in "${endpoints[@]}"; do
-        if curl -s --max-time 5 "$endpoint/health" > /dev/null 2>&1; then
-            API_ENDPOINT="$endpoint"
-            print_success "Detected API endpoint: $API_ENDPOINT"
-            return 0
-        fi
-    done
-    
-    # Check OpenShift route if available
-    if command -v oc &> /dev/null; then
-        print_status "Checking OpenShift routes..."
-        local route_url=$(oc get route -o jsonpath='{.items[0].spec.host}' 2>/dev/null || echo "")
-        if [ -n "$route_url" ]; then
-            API_ENDPOINT="https://$route_url"
-            print_success "Detected OpenShift route: $API_ENDPOINT"
-            return 0
-        fi
-    fi
-    
-    print_error "Could not detect API endpoint. Please specify with -e option."
-    return 1
-}
-
 # Function to validate API accessibility
 validate_api() {
     print_status "Validating API accessibility..."
@@ -164,7 +123,7 @@ validate_api() {
     local response
     
     if response=$(curl -s --max-time "$TIMEOUT" "$health_url" 2>/dev/null); then
-        if echo "$response" | grep -q '"status":"ok"'; then
+        if echo "$response" | grep -q '"status":"healthy"'; then
             print_success "API is accessible and healthy"
             return 0
         else
@@ -250,23 +209,23 @@ test_query_functionality() {
     print_header "Testing Query Functionality"
     
     # Test basic query
-    local basic_query='{"query": "What is OpenShift?", "top_k": 3}'
+    local basic_query='{"question": "What is OpenShift?", "top_k": 3}'
     make_request "POST" "/api/v1/query" "$basic_query" "Basic RAG query"
     
     # Test query with filters
-    local filtered_query='{"query": "Kubernetes platform", "top_k": 2, "filters": {"category": "cloud"}}'
+    local filtered_query='{"question": "Kubernetes platform", "top_k": 2, "filters": {"category": "cloud"}}'
     make_request "POST" "/api/v1/query" "$filtered_query" "Query with filters"
     
     # Test query with different top_k
-    local top_k_query='{"query": "Explain RAG technology", "top_k": 5}'
+    local top_k_query='{"question": "Explain RAG technology", "top_k": 5}'
     make_request "POST" "/api/v1/query" "$top_k_query" "Query with top_k=5"
     
     # Test query with model parameter
-    local model_query='{"query": "What is Elasticsearch?", "model_name": "microsoft/DialoGPT-medium"}'
+    local model_query='{"question": "What is Elasticsearch?", "model_name": "microsoft/DialoGPT-medium"}'
     make_request "POST" "/api/v1/query" "$model_query" "Query with specific model"
     
     # Test query with all parameters
-    local full_query='{"query": "Compare OpenShift and Kubernetes", "top_k": 3, "filters": {"category": "cloud"}, "model_name": "microsoft/DialoGPT-medium"}'
+    local full_query='{"question": "Compare OpenShift and Kubernetes", "top_k": 3, "filters": {"category": "cloud"}, "model_name": "microsoft/DialoGPT-medium"}'
     make_request "POST" "/api/v1/query" "$full_query" "Query with all parameters"
 }
 
@@ -282,18 +241,18 @@ test_error_scenarios() {
     make_request "POST" "/api/v1/query" "invalid json" "Invalid JSON format"
     
     # Test empty query
-    local empty_query='{"query": "", "top_k": 3}'
+    local empty_query='{"question": "", "top_k": 3}'
     make_request "POST" "/api/v1/query" "$empty_query" "Empty query string"
     
     # Test invalid top_k
-    local invalid_top_k='{"query": "test", "top_k": -1}'
+    local invalid_top_k='{"question": "test", "top_k": -1}'
     make_request "POST" "/api/v1/query" "$invalid_top_k" "Invalid top_k value"
     
     # Test non-existent endpoint
     make_request "GET" "/api/v1/nonexistent" "" "Non-existent endpoint"
     
     # Test invalid model name
-    local invalid_model='{"query": "test", "model_name": "invalid-model-12345"}'
+    local invalid_model='{"question": "test", "model_name": "invalid-model-12345"}'
     make_request "POST" "/api/v1/query" "$invalid_model" "Invalid model name"
 }
 
@@ -303,7 +262,7 @@ test_parameter_validation() {
     
     # Test various top_k values
     for top_k in 1 2 5 10; do
-        local query="{\"query\": \"Test query\", \"top_k\": $top_k}"
+        local query="{\"question\": \"Test question\", \"top_k\": $top_k}"
         make_request "POST" "/api/v1/query" "$query" "Query with top_k=$top_k"
     done
     
@@ -316,7 +275,7 @@ test_parameter_validation() {
     )
     
     for filter in "${filters[@]}"; do
-        local query="{\"query\": \"Test query\", \"top_k\": 2, \"filters\": $filter}"
+        local query="{\"question\": \"Test question\", \"top_k\": 2, \"filters\": $filter}"
         make_request "POST" "/api/v1/query" "$query" "Query with filters: $filter"
     done
 }
@@ -333,11 +292,11 @@ run_load_test() {
     
     # Test queries for load testing
     local test_queries=(
-        '{"query": "What is OpenShift?", "top_k": 2}'
-        '{"query": "How does Kubernetes work?", "top_k": 2}'
-        '{"query": "Explain RAG technology", "top_k": 2}'
-        '{"query": "What is Elasticsearch?", "top_k": 2}'
-        '{"query": "Compare OpenShift and Kubernetes", "top_k": 2}'
+        '{"question": "What is OpenShift?", "top_k": 2}'
+        '{"question": "How does Kubernetes work?", "top_k": 2}'
+        '{"question": "Explain RAG technology", "top_k": 2}'
+        '{"question": "What is Elasticsearch?", "top_k": 2}'
+        '{"question": "Compare OpenShift and Kubernetes", "top_k": 2}'
     )
     
     local query_count=0
@@ -564,8 +523,10 @@ main() {
     # Create temporary directory
     mkdir -p "$TEMP_DIR"
     
-    # Detect and validate API endpoint
-    if ! detect_endpoint; then
+    # Validar que API_ENDPOINT esté seteada
+    if [ -z "$API_ENDPOINT" ]; then
+        print_error "API_ENDPOINT variable is required. Set it at the top of the script or pass with -e."
+        print_error "Ejemplo: API_ENDPOINT=http://your-api-url ./scripts/test-api.sh o edita el script."
         exit 1
     fi
     

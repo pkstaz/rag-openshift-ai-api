@@ -18,7 +18,7 @@ maintainers:
   - name: Carlos Estay
     email: c.estay.g@gmail.com
     url: https://github.com/pkstaz
-icon: https://raw.githubusercontent.com/pkstaz/rag-openshift-ai-api/main/docs/icon.png
+icon: https://raw.githubusercontent.com/pkstaz/rag-openshift-ai-api/main/helm/icon.png
 annotations:
   category: AI/ML
   licenses: MIT

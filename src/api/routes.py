@@ -1,6 +1,7 @@
 import time
 from typing import Dict, Any, List
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import PlainTextResponse
@@ -11,23 +12,18 @@ from .models import (
     SimpleHealthResponse as HealthResponse, InfoResponse, ModelInfo
 )
 from ..config.settings import settings
-from ..utils.logging import get_logger, log_http_request, log_http_response
 from ..utils.metrics import (
     increment_request_counter, record_request_duration,
     record_error, get_metrics_summary
 )
-from ..rag.agent import get_rag_agent, get_rag_health, get_rag_info
-from ..rag.embeddings import get_embedding_health
-from ..rag.retriever import get_retriever_health
+from ..rag import get_rag_health, get_embedding_health, get_retriever_health
 
 
 # =============================================================================
 # Router Setup
 # =============================================================================
 
-router = APIRouter(prefix="/api/v1", tags=["RAG API"])
-
-logger = get_logger("api.routes")
+router = APIRouter(tags=["RAG API"])
 
 
 # =============================================================================
@@ -46,35 +42,40 @@ async def request_context(request: Request):
     correlation_id = get_correlation_id(request)
     
     # Log request start
-    log_http_request(
-        request.method,
-        str(request.url),
-        correlation_id=correlation_id,
-        client_ip=request.client.host if request.client else None,
-        user_agent=request.headers.get("User-Agent")
-    )
+    logging.info("=" * 60)
+    logging.info("📥 REQUEST RECEIVED")
+    logging.info("=" * 60)
+    logging.info(f"📋 Method: {request.method}")
+    logging.info(f"📋 URL: {request.url}")
+    logging.info(f"📋 Correlation ID: {correlation_id}")
+    logging.info(f"📋 Client IP: {request.client.host if request.client else None}")
+    logging.info(f"📋 User-Agent: {request.headers.get('User-Agent')}")
+    logging.info("=" * 60)
     
     try:
         yield correlation_id, start_time
     except Exception as e:
         # Log error
-        logger.error(
-            "Request processing error",
-            correlation_id=correlation_id,
-            error=str(e),
-            error_type=type(e).__name__
-        )
+        logging.error("=" * 80)
+        logging.error("🚨 REQUEST PROCESSING ERROR")
+        logging.error("=" * 80)
+        logging.error(f"📋 Correlation ID: {correlation_id}")
+        logging.error(f"📋 Error Type: {type(e).__name__}")
+        logging.error(f"📋 Error Message: {str(e)}")
+        logging.error("=" * 80)
         record_error(type(e).__name__, "api")
         raise
     finally:
         # Log response
         duration = time.time() - start_time
-        log_http_response(
-            request.method,
-            str(request.url),
-            duration,
-            correlation_id=correlation_id
-        )
+        logging.info("=" * 60)
+        logging.info("📤 REQUEST PROCESSED")
+        logging.info("=" * 60)
+        logging.info(f"📋 Method: {request.method}")
+        logging.info(f"📋 URL: {request.url}")
+        logging.info(f"📋 Duration: {duration} seconds")
+        logging.info(f"📋 Correlation ID: {correlation_id}")
+        logging.info("=" * 60)
 
 
 # =============================================================================
@@ -98,17 +99,19 @@ async def process_query(
         
         try:
             # Increment request counter
-            increment_request_counter("POST", "/api/v1/query", "200")
+            increment_request_counter("POST", "/query", "200")
             
-            logger.info(
-                "Processing query request",
-                correlation_id=correlation_id,
-                question_length=len(query_request.question),
-                llm_params=query_request.llm_params,
-                retrieval_params=query_request.retrieval_params
-            )
+            logging.info("=" * 60)
+            logging.info("🔄 PROCESSING QUERY REQUEST")
+            logging.info("=" * 60)
+            logging.info(f"📋 Correlation ID: {correlation_id}")
+            logging.info(f"📋 Question Length: {len(query_request.question)}")
+            logging.info(f"📋 LLM Params: {query_request.llm_params}")
+            logging.info(f"📋 Retrieval Params: {query_request.retrieval_params}")
+            logging.info("=" * 60)
             
             # Get RAG agent
+            from ..rag.agent import get_rag_agent
             rag_agent = get_rag_agent()
             
             # Process query
@@ -120,29 +123,31 @@ async def process_query(
             
             # Record request duration
             duration = time.time() - start_time
-            record_request_duration("POST", "/api/v1/query", "200", duration)
+            record_request_duration("POST", "/query", "200", duration)
             
-            logger.info(
-                "Query processed successfully",
-                correlation_id=correlation_id,
-                answer_length=len(response.answer),
-                num_sources=len(response.sources),
-                confidence_score=response.confidence_score,
-                processing_time_ms=response.query_metadata.processing_time_ms if response.query_metadata else None
-            )
+            logging.info("=" * 60)
+            logging.info("✅ QUERY PROCESSED SUCCESSFULLY")
+            logging.info("=" * 60)
+            logging.info(f"📋 Correlation ID: {correlation_id}")
+            logging.info(f"📋 Answer Length: {len(response.answer)}")
+            logging.info(f"📋 Num Sources: {len(response.sources)}")
+            logging.info(f"📋 Confidence Score: {response.confidence_score}")
+            logging.info(f"📋 Processing Time: {response.query_metadata.processing_time_ms if response.query_metadata else None} ms")
+            logging.info("=" * 60)
             
             return response
             
         except ValueError as e:
             # Bad request - validation error
-            increment_request_counter("POST", "/api/v1/query", "400")
+            increment_request_counter("POST", "/query", "400")
             record_error("ValueError", "api")
             
-            logger.warning(
-                "Invalid query request",
-                correlation_id=correlation_id,
-                error=str(e)
-            )
+            logging.warning("=" * 60)
+            logging.warning("⚠️ INVALID QUERY REQUEST")
+            logging.warning("=" * 60)
+            logging.warning(f"📋 Correlation ID: {correlation_id}")
+            logging.warning(f"📋 Error: {str(e)}")
+            logging.warning("=" * 60)
             
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -151,14 +156,15 @@ async def process_query(
             
         except ConnectionError as e:
             # Service unavailable - connection issues
-            increment_request_counter("POST", "/api/v1/query", "503")
+            increment_request_counter("POST", "/query", "503")
             record_error("ConnectionError", "api")
             
-            logger.error(
-                "Service unavailable",
-                correlation_id=correlation_id,
-                error=str(e)
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 SERVICE UNAVAILABLE")
+            logging.error("=" * 80)
+            logging.error(f"📋 Correlation ID: {correlation_id}")
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error("=" * 80)
             
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -167,15 +173,16 @@ async def process_query(
             
         except Exception as e:
             # Internal server error
-            increment_request_counter("POST", "/api/v1/query", "500")
+            increment_request_counter("POST", "/query", "500")
             record_error(type(e).__name__, "api")
             
-            logger.error(
-                "Internal server error during query processing",
-                correlation_id=correlation_id,
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 INTERNAL SERVER ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Correlation ID: {correlation_id}")
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error(f"📋 Error Type: {type(e).__name__}")
+            logging.error("=" * 80)
             
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -199,7 +206,7 @@ async def health_check(request: Request) -> HealthResponse:
     
     async with request_context(request) as (correlation_id, start_time):
         
-        increment_request_counter("GET", "/api/v1/health", "200")
+        increment_request_counter("GET", "/health", "200")
         
         try:
             # Basic health check - just check if API is responding
@@ -211,25 +218,27 @@ async def health_check(request: Request) -> HealthResponse:
             }
             
             duration = time.time() - start_time
-            record_request_duration("GET", "/api/v1/health", "200", duration)
+            record_request_duration("GET", "/health", "200", duration)
             
-            logger.debug(
-                "Health check completed",
-                correlation_id=correlation_id,
-                status="healthy"
-            )
+            logging.debug("=" * 50)
+            logging.debug("✅ HEALTH CHECK COMPLETED")
+            logging.debug("=" * 50)
+            logging.debug(f"📋 Correlation ID: {correlation_id}")
+            logging.debug(f"📋 Status: healthy")
+            logging.debug("=" * 50)
             
             return HealthResponse(**health_status)
             
         except Exception as e:
-            increment_request_counter("GET", "/api/v1/health", "503")
+            increment_request_counter("GET", "/health", "503")
             record_error(type(e).__name__, "api")
             
-            logger.error(
-                "Health check failed",
-                correlation_id=correlation_id,
-                error=str(e)
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 HEALTH CHECK FAILED")
+            logging.error("=" * 80)
+            logging.error(f"📋 Correlation ID: {correlation_id}")
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error("=" * 80)
             
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -250,48 +259,97 @@ async def readiness_check(request: Request) -> HealthResponse:
     async with request_context(request) as (correlation_id, start_time):
         
         try:
-            # Check RAG agent health
-            rag_health = get_rag_health()
+            # Fast readiness check - only check basic connectivity
+            components_status = {}
+            errors = []
             
-            if not rag_health["agent_healthy"]:
-                increment_request_counter("GET", "/api/v1/ready", "503")
+            # Check Elasticsearch (fast)
+            try:
+                from ..rag.retriever import get_retriever_health
+                es_health = get_retriever_health()
+                components_status["elasticsearch"] = es_health
+                if not es_health.get("connection_healthy", False):
+                    errors.append("Elasticsearch connection unhealthy")
+            except Exception as e:
+                components_status["elasticsearch"] = {"connection_healthy": False, "error": str(e)}
+                errors.append(f"Elasticsearch check failed: {str(e)}")
+            
+            # Check Embeddings (fast)
+            try:
+                from ..rag.embeddings import get_embedding_health
+                emb_health = get_embedding_health()
+                components_status["embeddings"] = emb_health
+                if not emb_health.get("model_loaded", False):
+                    errors.append("Embedding model not loaded")
+            except Exception as e:
+                components_status["embeddings"] = {"model_loaded": False, "error": str(e)}
+                errors.append(f"Embedding check failed: {str(e)}")
+            
+            # Check vLLM (fast - just client existence)
+            try:
+                from ..rag.agent import get_rag_agent
+                agent = get_rag_agent()
+                if hasattr(agent, 'llm_client') and agent.llm_client is not None:
+                    components_status["vllm"] = {
+                        "connection_healthy": True,
+                        "model_name": agent.model_name
+                    }
+                else:
+                    components_status["vllm"] = {"connection_healthy": False, "error": "LLM client not initialized"}
+                    errors.append("vLLM client not initialized")
+            except Exception as e:
+                components_status["vllm"] = {"connection_healthy": False, "error": str(e)}
+                errors.append(f"vLLM check failed: {str(e)}")
+            
+            # Determine overall health
+            agent_healthy = len(errors) == 0
+            
+            if not agent_healthy:
+                increment_request_counter("GET", "/ready", "503")
                 record_error("UnhealthyDependencies", "api")
                 
-                logger.warning(
-                    "Readiness check failed - unhealthy dependencies",
-                    correlation_id=correlation_id,
-                    errors=rag_health["errors"]
-                )
+                logging.warning("=" * 80)
+                logging.warning("⚠️ READINESS CHECK FAILED")
+                logging.warning("=" * 80)
+                logging.warning(f"📋 Correlation ID: {correlation_id}")
+                logging.warning(f"📋 Errors: {errors}")
+                logging.warning("=" * 80)
                 
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail={
                         "status": "not_ready",
-                        "errors": rag_health["errors"],
-                        "components": rag_health["components"]
+                        "errors": errors,
+                        "components": components_status
                     }
                 )
             
             # All dependencies healthy
-            increment_request_counter("GET", "/api/v1/ready", "200")
+            increment_request_counter("GET", "/ready", "200")
             
             health_status = {
                 "status": "ready",
                 "timestamp": time.time(),
                 "version": settings.api.version,
                 "service": "rag-api",
-                "components": rag_health["components"],
-                "performance": rag_health["performance"]
+                "components": components_status,
+                "performance": {
+                    "total_queries_processed": 0,
+                    "total_processing_time": 0.0,
+                    "average_processing_time": 0.0
+                }
             }
             
             duration = time.time() - start_time
-            record_request_duration("GET", "/api/v1/ready", "200", duration)
+            record_request_duration("GET", "/ready", "200", duration)
             
-            logger.info(
-                "Readiness check passed",
-                correlation_id=correlation_id,
-                components=list(rag_health["components"].keys())
-            )
+            logging.info("=" * 60)
+            logging.info("✅ READINESS CHECK PASSED")
+            logging.info("=" * 60)
+            logging.info(f"📋 Correlation ID: {correlation_id}")
+            logging.info(f"📋 Components: {list(components_status.keys())}")
+            logging.info(f"📋 Duration: {duration:.3f}s")
+            logging.info("=" * 60)
             
             return HealthResponse(**health_status)
             
@@ -299,14 +357,15 @@ async def readiness_check(request: Request) -> HealthResponse:
             # Re-raise HTTP exceptions
             raise
         except Exception as e:
-            increment_request_counter("GET", "/api/v1/ready", "503")
+            increment_request_counter("GET", "/ready", "503")
             record_error(type(e).__name__, "api")
             
-            logger.error(
-                "Readiness check error",
-                correlation_id=correlation_id,
-                error=str(e)
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 READINESS CHECK ERROR")
+            logging.error("=" * 80)
+            logging.error(f"📋 Correlation ID: {correlation_id}")
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error("=" * 80)
             
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -330,20 +389,21 @@ async def get_metrics(request: Request) -> PlainTextResponse:
     
     async with request_context(request) as (correlation_id, start_time):
         
-        increment_request_counter("GET", "/api/v1/metrics", "200")
+        increment_request_counter("GET", "/metrics", "200")
         
         try:
             # Generate Prometheus metrics
             metrics_data = generate_latest()
             
             duration = time.time() - start_time
-            record_request_duration("GET", "/api/v1/metrics", "200", duration)
+            record_request_duration("GET", "/metrics", "200", duration)
             
-            logger.debug(
-                "Metrics requested",
-                correlation_id=correlation_id,
-                metrics_size=len(metrics_data)
-            )
+            logging.debug("=" * 50)
+            logging.debug("📊 METRICS REQUESTED")
+            logging.debug("=" * 50)
+            logging.debug(f"📋 Correlation ID: {correlation_id}")
+            logging.debug(f"📋 Metrics Size: {len(metrics_data)}")
+            logging.debug("=" * 50)
             
             return PlainTextResponse(
                 content=metrics_data,
@@ -351,14 +411,15 @@ async def get_metrics(request: Request) -> PlainTextResponse:
             )
             
         except Exception as e:
-            increment_request_counter("GET", "/api/v1/metrics", "500")
+            increment_request_counter("GET", "/metrics", "500")
             record_error(type(e).__name__, "api")
             
-            logger.error(
-                "Metrics generation failed",
-                correlation_id=correlation_id,
-                error=str(e)
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 METRICS GENERATION FAILED")
+            logging.error("=" * 80)
+            logging.error(f"📋 Correlation ID: {correlation_id}")
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error("=" * 80)
             
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -382,10 +443,11 @@ async def get_api_info(request: Request) -> InfoResponse:
     
     async with request_context(request) as (correlation_id, start_time):
         
-        increment_request_counter("GET", "/api/v1/info", "200")
+        increment_request_counter("GET", "/info", "200")
         
         try:
             # Get RAG agent info
+            from ..rag.agent import get_rag_info
             rag_info = get_rag_info()
             
             info_data = {
@@ -408,25 +470,27 @@ async def get_api_info(request: Request) -> InfoResponse:
             }
             
             duration = time.time() - start_time
-            record_request_duration("GET", "/api/v1/info", "200", duration)
+            record_request_duration("GET", "/info", "200", duration)
             
-            logger.info(
-                "API info requested",
-                correlation_id=correlation_id,
-                version=settings.api.version
-            )
+            logging.info("=" * 50)
+            logging.info("ℹ️ API INFO REQUESTED")
+            logging.info("=" * 50)
+            logging.info(f"📋 Correlation ID: {correlation_id}")
+            logging.info(f"📋 Version: {settings.api.version}")
+            logging.info("=" * 50)
             
             return InfoResponse(**info_data)
             
         except Exception as e:
-            increment_request_counter("GET", "/api/v1/info", "500")
+            increment_request_counter("GET", "/info", "500")
             record_error(type(e).__name__, "api")
             
-            logger.error(
-                "Failed to get API info",
-                correlation_id=correlation_id,
-                error=str(e)
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 API INFO FAILED")
+            logging.error("=" * 80)
+            logging.error(f"📋 Correlation ID: {correlation_id}")
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error("=" * 80)
             
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -446,7 +510,7 @@ async def get_available_models(request: Request) -> List[ModelInfo]:
     
     async with request_context(request) as (correlation_id, start_time):
         
-        increment_request_counter("GET", "/api/v1/models", "200")
+        increment_request_counter("GET", "/models", "200")
         
         try:
             # For now, return the configured model
@@ -481,82 +545,32 @@ async def get_available_models(request: Request) -> List[ModelInfo]:
             )
             
             duration = time.time() - start_time
-            record_request_duration("GET", "/api/v1/models", "200", duration)
+            record_request_duration("GET", "/models", "200", duration)
             
-            logger.info(
-                "Models list requested",
-                correlation_id=correlation_id,
-                num_models=len(models)
-            )
+            logging.info("=" * 50)
+            logging.info("🤖 MODELS LIST REQUESTED")
+            logging.info("=" * 50)
+            logging.info(f"📋 Correlation ID: {correlation_id}")
+            logging.info(f"📋 Num Models: {len(models)}")
+            logging.info("=" * 50)
             
             return models
             
         except Exception as e:
-            increment_request_counter("GET", "/api/v1/models", "500")
+            increment_request_counter("GET", "/models", "500")
             record_error(type(e).__name__, "api")
             
-            logger.error(
-                "Failed to get models list",
-                correlation_id=correlation_id,
-                error=str(e)
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 MODELS LIST FAILED")
+            logging.error("=" * 80)
+            logging.error(f"📋 Correlation ID: {correlation_id}")
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error("=" * 80)
             
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to retrieve models information"
             )
-
-
-# =============================================================================
-# Error Handlers
-# =============================================================================
-
-@router.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions with structured error responses."""
-    
-    correlation_id = get_correlation_id(request)
-    
-    error_response = ErrorResponse(
-        error=exc.detail,
-        status_code=exc.status_code,
-        timestamp=time.time(),
-        correlation_id=correlation_id
-    )
-    
-    logger.warning(
-        "HTTP exception",
-        correlation_id=correlation_id,
-        status_code=exc.status_code,
-        detail=exc.detail
-    )
-    
-    return error_response
-
-
-@router.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    """Handle general exceptions with structured error responses."""
-    
-    correlation_id = get_correlation_id(request)
-    
-    error_response = ErrorResponse(
-        error="Internal server error",
-        status_code=500,
-        timestamp=time.time(),
-        correlation_id=correlation_id
-    )
-    
-    logger.error(
-        "Unhandled exception",
-        correlation_id=correlation_id,
-        error=str(exc),
-        error_type=type(exc).__name__
-    )
-    
-    record_error(type(exc).__name__, "api")
-    
-    return error_response
 
 
 # =============================================================================
@@ -575,7 +589,7 @@ async def get_detailed_status(request: Request) -> Dict[str, Any]:
     
     async with request_context(request) as (correlation_id, start_time):
         
-        increment_request_counter("GET", "/api/v1/status", "200")
+        increment_request_counter("GET", "/status", "200")
         
         try:
             # Collect status from all components
@@ -592,24 +606,26 @@ async def get_detailed_status(request: Request) -> Dict[str, Any]:
             }
             
             duration = time.time() - start_time
-            record_request_duration("GET", "/api/v1/status", "200", duration)
+            record_request_duration("GET", "/status", "200", duration)
             
-            logger.info(
-                "Detailed status requested",
-                correlation_id=correlation_id
-            )
+            logging.info("=" * 50)
+            logging.info("📊 DETAILED STATUS REQUESTED")
+            logging.info("=" * 50)
+            logging.info(f"📋 Correlation ID: {correlation_id}")
+            logging.info("=" * 50)
             
             return status_data
             
         except Exception as e:
-            increment_request_counter("GET", "/api/v1/status", "500")
+            increment_request_counter("GET", "/status", "500")
             record_error(type(e).__name__, "api")
             
-            logger.error(
-                "Failed to get detailed status",
-                correlation_id=correlation_id,
-                error=str(e)
-            )
+            logging.error("=" * 80)
+            logging.error("🚨 DETAILED STATUS FAILED")
+            logging.error("=" * 80)
+            logging.error(f"📋 Correlation ID: {correlation_id}")
+            logging.error(f"📋 Error: {str(e)}")
+            logging.error("=" * 80)
             
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

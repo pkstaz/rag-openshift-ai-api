@@ -15,13 +15,14 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default values
-IMAGE_NAME="rag-api"
-IMAGE_TAG="latest"
+IMAGE_NAME="rag-openshift-ai-api"
+IMAGE_TAG="dev-16"
 BUILD_ENGINE="podman"
 BUILD_FILE="Containerfile"
 PLATFORM="linux/amd64"
-PUSH_IMAGE=false
-REGISTRY=""
+PUSH_IMAGE=true
+REGISTRY="quay.io/cestayg"
+USE_NO_CACHE=false
 
 # Function to print colored output
 print_info() {
@@ -49,15 +50,15 @@ Options:
     -n, --name NAME         Image name (default: rag-api)
     -t, --tag TAG          Image tag (default: latest)
     -e, --engine ENGINE    Build engine: podman, docker (default: podman)
-    -f, --file FILE        Build file: Containerfile, Dockerfile (default: Containerfile)
+    -f, --file FILE        Build file: Containerfile (default: Containerfile)
     -p, --platform PLAT    Platform: linux/amd64, linux/arm64 (default: linux/amd64)
     -r, --registry REG     Registry URL for pushing
     --push                 Push image to registry after build
+    --no-cache             Build image with --no-cache
     -h, --help             Show this help message
 
 Build Files:
     Containerfile          - Primary build file (recommended)
-    Dockerfile             - Compatibility build file
 
 Build Engines:
     podman                 - Red Hat's container engine (recommended)
@@ -67,8 +68,8 @@ Examples:
     # Build with Containerfile using Podman
     $0 -f Containerfile -e podman
 
-    # Build with Dockerfile using Docker
-    $0 -f Dockerfile -e docker
+    # Build with Containerfile using Docker
+    $0 -f Containerfile -e docker
 
     # Build and push to registry
     $0 -r your-registry.com -t v1.0.0 --push
@@ -116,6 +117,11 @@ build_image() {
     # Add platform if specified
     if [ -n "$PLATFORM" ]; then
         build_cmd="$build_cmd --platform $PLATFORM"
+    fi
+    
+    # Add no-cache if specified
+    if [ "$USE_NO_CACHE" = true ]; then
+        build_cmd="$build_cmd --no-cache"
     fi
     
     # Add build file
@@ -237,6 +243,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --push)
             PUSH_IMAGE=true
+            shift
+            ;;
+        --no-cache)
+            USE_NO_CACHE=true
             shift
             ;;
         -h|--help)
